@@ -64,9 +64,7 @@ Output latency is only 2 packets in stream.
 It is minimal latency by design, but you can
 increase it in vban2pipe.c:
 ```
-
 #define STREAM_TIMEOUT_MSEC 700
 #define BUFFER_OUT_PACKETS 2    <-- HERE
-
 
 ```
