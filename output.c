@@ -128,7 +128,8 @@ void output_play(int fd, int64_t ts, long samples,
 
             if (write(fd, buffer, i * ss) < 0) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    fprintf(stderr, "output overrun: %ld samples\n", i);
+                    // report override can be very noisy if source suspended
+                    // fprintf(stderr, "output overrun: %ld samples\n", i);
                 } else {
                     fprintf(stderr, "write failed: %s\n", strerror(errno));
                     exit(1);
