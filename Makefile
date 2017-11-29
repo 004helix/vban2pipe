@@ -4,7 +4,7 @@ CFLAGS = -Wall -Werror
 #CFLAGS = -Wall -g
 LDFLAGS = 
 
-EXE = pulse-vban2pipe
+EXE = vban2pipe
 SRC = $(wildcard *.c)
 OBJ = $(patsubst %.c,build/%.o,$(SRC))
 

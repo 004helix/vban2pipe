@@ -1,5 +1,5 @@
 /*
- *  Pulseaudio VBAN Receiver
+ *  VBAN Receiver
  *
  *  Copyright (C) 2017 Raman Shyshniou <rommer@ibuffed.com>
  *  All Rights Reserved.

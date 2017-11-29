@@ -1,3 +1,3 @@
 build/*.o
 build/*.d
-pulse-vban2pipe
+vban2pipe

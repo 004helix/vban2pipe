@@ -1,5 +1,5 @@
 /*
- *  Pulseaudio VBAN Receiver
+ *  VBAN Receiver
  *
  *  Copyright (C) 2017 Raman Shyshniou <rommer@ibuffed.com>
  *  All Rights Reserved.
@@ -257,7 +257,7 @@ int main(int argc, char **argv)
 
     // check command line arguments
     if (argc < 3) {
-        fprintf(stderr, "usage: %s <port> <pulseaudio-pipe> [exec-on-connect] [exec-on-disconnect]\n", argv[0]);
+        fprintf(stderr, "usage: %s <port> <pipe> [exec-on-connect] [exec-on-disconnect]\n", argv[0]);
         return 1;
     }
 

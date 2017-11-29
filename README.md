@@ -1,15 +1,15 @@
-# Pulseaudio VBAN receiver
+# VBAN receiver
 
 This program receives audio data sent using [VB-Audio software](https://www.vb-audio.com/)
-and resend it to named pipe.
+and send it to named pipe.
 
 # Usage:
 
 ```
-pulse-vban2pipe <port> <pulseaudio-pipe> [exec-on-connect] [exec-on-disconnect]
+vban2pipe <port> <pipe> [exec-on-connect] [exec-on-disconnect]
 ```
 
-# Example:
+# Example for pulseaudio:
 
 load pipe-source module
 ```
@@ -17,14 +17,14 @@ $ pactl load-module module-pipe-source source_name=pipe \
   file=/tmp/vban.input format=s16le rate=48000 channels=2
 ```
 
-start pulse-vban2pipe
+start vban2pipe
 ```
-$ pulse-vban2pipe 6980 /tmp/vban.input
+$ vban2pipe 6980 /tmp/vban.input
 ```
 
 enable VBAN stream on sender side and you should see
 ```
-$ pulse-vban2pipe 6980 /tmp/vban.input
+$ vban2pipe 6980 /tmp/vban.input
 [Stream1] stream connected from 172.16.0.2:59708, s16le, 48000 Hz, 2 channel(s)
 [Stream1] stream online, primary
 ...
@@ -35,7 +35,7 @@ This program can receive several streams simultaneously. All streams should use
 the same format and sample rate. Backup streams will used to restore lost
 packets after streams synchronization:
 ```
-$ pulse-vban2pipe 6980 /tmp/vban.input
+$ vban2pipe 6980 /tmp/vban.input
 [Stream1] stream connected from 172.16.0.2:56503, s16le, 48000 Hz, 2 channel(s)
 [Stream1] stream online, primary
 [Stream2] stream connected from 172.16.0.2:56504, s16le, 48000 Hz, 2 channel(s)
@@ -48,7 +48,7 @@ $ pulse-vban2pipe 6980 /tmp/vban.input
 ...
 ```
 
-If lost packets cannot be restored, pulse-vban2pipe reports lost output:
+If lost packets cannot be restored, vban2pipe reports lost output:
 ```
 ...
 [Stream2] expected 3490818, got 3490821: lost 3 packet(s)
