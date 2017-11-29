@@ -62,4 +62,11 @@ If lost packets cannot be restored, vban2pipe reports lost output:
 
 Output latency is only 2 packets in stream.
 It is minimal latency by design, but you can
-increase it in vban2pipe.c (BUFFER_OUT_PACKETS)
+increase it in vban2pipe.c:
+```
+
+#define STREAM_TIMEOUT_MSEC 700
+#define BUFFER_OUT_PACKETS 2    <-- HERE
+
+
+```
