@@ -11,18 +11,18 @@ vban2pipe <port> <pipe> [exec-on-connect] [exec-on-disconnect]
 
 # Example for pulseaudio:
 
-load pipe-source module
+Load pipe-source module
 ```
 $ pactl load-module module-pipe-source source_name=pipe \
   file=/tmp/vban.input format=s16le rate=48000 channels=2
 ```
 
-start vban2pipe
+Start vban2pipe
 ```
 $ vban2pipe 6980 /tmp/vban.input
 ```
 
-enable VBAN stream on sender side and you should see
+Enable VBAN stream on sender side and you should see
 ```
 $ vban2pipe 6980 /tmp/vban.input
 [Stream1] stream connected from 172.16.0.2:59708, s16le, 48000 Hz, 2 channel(s)
@@ -32,7 +32,7 @@ $ vban2pipe 6980 /tmp/vban.input
 ```
 
 This program can receive several streams simultaneously. All streams should use
-the same format and sample rate. Backup streams will used to restore lost
+the same format and sample rate. Backup streams will be used to restore lost
 packets after streams synchronization:
 ```
 $ vban2pipe 6980 /tmp/vban.input
@@ -59,3 +59,7 @@ If lost packets cannot be restored, vban2pipe reports lost output:
 ...
 
 ```
+
+Output latency is only 2 packets in stream.
+It is minimal latency by design, but you can
+increase it in vban2pipe.c (BUFFER_OUT_PACKETS)
