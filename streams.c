@@ -341,8 +341,8 @@ struct stream *recvvban(int sock)
 
         // check sequence overflow
         delta = (int64_t) info.seq - (int64_t) stream->expected;
-        delta1 = delta + 0x10000000L;
-        delta2 = delta - 0x10000000L;
+        delta1 = delta + 0x100000000L;
+        delta2 = delta - 0x100000000L;
 
         if (llabs(delta2) < llabs(delta1))
             delta1 = delta2;
@@ -359,9 +359,14 @@ struct stream *recvvban(int sock)
         }
 
         // lost packets
-        fprintf(stderr, "[%s] expected %lu, got %lu: lost %lld packet(s)\n",
-                info.name, (long unsigned) stream->expected,
-                (long unsigned) info.seq, (long long) delta);
+        if (delta == 1)
+            fprintf(stderr, "[%s] expected %lu, got %lu: lost 1 packet\n",
+                    info.name, (long unsigned) stream->expected,
+                    (long unsigned) info.seq);
+        else
+            fprintf(stderr, "[%s] expected %lu, got %lu: lost %lld packets\n",
+                    info.name, (long unsigned) stream->expected,
+                    (long unsigned) info.seq, (long long) delta);
 
         if (stream->prev)
             free(stream->prev);
