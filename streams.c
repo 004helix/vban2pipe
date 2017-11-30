@@ -33,8 +33,7 @@
 #include "vban.h"
 #include "streams.h"
 
-#define DATA_BUFFER_SIZE 2000
-
+#define DATA_BUFFER_SIZE 1436
 
 struct stream *streams = NULL;
 
@@ -171,7 +170,7 @@ struct stream *recvvban(int sock)
 
     buffer = malloc(DATA_BUFFER_SIZE);
     if (!buffer) {
-        fprintf(stderr, "Cannot allocate memory\n");
+        fprintf(stderr, "cannot allocate memory!\n");
         return NULL;
     }
 
@@ -204,17 +203,17 @@ struct stream *recvvban(int sock)
         }
 
         if (vban_parse(vban_header, size, &info) < 0) {
-            fprintf(stderr, "Malformed VBAN Packet\n");
+            fprintf(stderr, "malformed VBAN packet received\n");
             continue;
         }
 
         if (info.protocol != VBAN_PROTOCOL_AUDIO) {
-            fprintf(stderr, "Unsupporded protocol\n");
+            fprintf(stderr, "[%s] unsupporded protocol\n", info.name);
             continue;
         }
 
         if (info.codec != VBAN_CODEC_PCM) {
-            fprintf(stderr, "Unsupported audio codec\n");
+            fprintf(stderr, "[%s] unsupported audio codec\n", info.name);
             continue;
         }
 
@@ -224,11 +223,11 @@ struct stream *recvvban(int sock)
         if (stream) {
             // check packet size
             if (size < stream->datasize) {
-                fprintf(stderr, "Too short packet received, stream %s\n", info.name);
+                fprintf(stderr, "[%s] too short packet received\n", info.name);
                 continue;
             } else
             if (size > stream->datasize) {
-                fprintf(stderr, "Too long packet received, stream %s\n", info.name);
+                fprintf(stderr, "[%s] too long packet received\n", info.name);
                 continue;
             }
 
@@ -237,7 +236,7 @@ struct stream *recvvban(int sock)
                 stream->datatype != info.datatype ||
                 stream->channels != info.channels ||
                 stream->sample_rate != info.sample_rate) {
-                fprintf(stderr, "Bad packet received, stream %s\n", info.name);
+                fprintf(stderr, "[%s] bad packet received\n", info.name);
                 continue;
             }
         } else {
@@ -261,20 +260,20 @@ struct stream *recvvban(int sock)
                 };
 #endif
                 default:
-                    fprintf(stderr, "Unsupported address family\n");
+                    fprintf(stderr, "[%s] unsupported address family\n", info.name);
                     continue;
             }
 
             // check data size
             if (size != info.samples * info.sample_size * info.channels) {
-                fprintf(stderr, "Invalid packet size, stream %s\n", info.name);
+                fprintf(stderr, "[%s] invalid packet size\n", info.name);
                 continue;
             }
 
             // create new stream entry
             stream = malloc(sizeof(struct stream));
             if (!stream) {
-                fprintf(stderr, "Cannot allocate memory\n");
+                fprintf(stderr, "[%s] cannot allocate memory\n", info.name);
                 free(buffer);
                 return NULL;
             }
@@ -321,7 +320,7 @@ struct stream *recvvban(int sock)
             }
 
         if (!found_tv) {
-            fprintf(stderr, "[%s] Couldn't find SCM_TIMESTAMP data in auxiliary recvmsg() data!\n",
+            fprintf(stderr, "[%s] couldn't find SCM_TIMESTAMP data in auxiliary recvmsg() data!\n",
                     stream->name);
             free(buffer);
             return NULL;
