@@ -127,15 +127,8 @@ void run(int sock, int pipefd)
     while (1) {
         stream = recvvban(sock);
 
-        // all streams disconnected or fatal error
-        if (!stream) {
-            if (streams) {
-                forgetstreams();
-                if (ondisconnect)
-                    runhook(ondisconnect);
-            }
+        if (!stream)
             return;
-        }
 
         // check dead streams
         for (dead = streams; dead; dead = dead->next) {
@@ -157,12 +150,9 @@ void run(int sock, int pipefd)
                 struct stream *curr;
                 int64_t delta;
 
-                if (!streams->next) {
-                    if (ondisconnect)
-                        runhook(ondisconnect);
-                    forgetstreams();
+                if (!streams->next)
+                    // last stream timed out
                     return;
-                }
 
                 delta = dead->next->offset;
 
@@ -219,7 +209,7 @@ void run(int sock, int pipefd)
 
             if (matches == 1) {
                 if (stream->insync++ && stream->offset != offset) {
-                    // offset mismatch, pause (250ms) and try to sync again
+                    // offset mismatch, pause (~250ms) and try to sync again
                     stream->insync = -(long) (stream->sample_rate / stream->samples / 4);
                     continue;
                 }
@@ -231,7 +221,7 @@ void run(int sock, int pipefd)
                 stream->offset = offset;
             } else {
                 if (stream->insync == 0)
-                    // still cant sync, pause (250ms) stream for a while
+                    // still cant sync, pause (~250ms) stream for a while
                     stream->insync = -(long) (stream->sample_rate / stream->samples / 4);
             }
 
@@ -289,7 +279,7 @@ int main(int argc, char **argv)
     // set receive timeout
     timeout.tv_sec = STREAM_TIMEOUT_MSEC / 1000000;
     timeout.tv_usec = (STREAM_TIMEOUT_MSEC % 100000) * 1000;
-    if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout,
+    if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout,
                    sizeof(timeout)) < 0)
         error("setsockopt failed");
 
@@ -307,12 +297,20 @@ int main(int argc, char **argv)
     // setup connect/disconnect handlers
     if (argc > 3)
         onconnect = strdup(argv[3]);
+
     if (argc > 4)
         ondisconnect = strdup(argv[4]);
 
     // run
     while (1) {
         run(sock, pipefd);
+
+        // disconnect all streams
+        if (streams) {
+            forgetstreams();
+            if (ondisconnect)
+                runhook(ondisconnect);
+        }
     }
 
     return 0;

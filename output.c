@@ -98,7 +98,7 @@ void output_play(int fd, int64_t ts, long samples,
             // nothing to play in this packet
             return;
 
-        off = (long) outpos - (long) ts;
+        off = (long) (outpos - ts);
         len = samples - off;
 
         memcpy(buffer, data + off * ss, len * ss);
@@ -116,14 +116,14 @@ void output_play(int fd, int64_t ts, long samples,
         return;
     }
 
-    len = ts + samples - outpos - cache;
+    len = (long) ((ts - outpos) + (int64_t) (samples - cache));
     outpos += len;
 
     // play samples from the start of buffer
     lost = 0;
     while (len) {
         if (*presence) {
-            // search length of block to play
+            // calc length of block to play
             for (i = 1; i < len && i < cache && presence[i]; i++);
 
             if (write(fd, buffer, i * ss) < 0) {
@@ -145,8 +145,9 @@ void output_play(int fd, int64_t ts, long samples,
             }
             len -= i;
         } else {
-            // search length of lost block
+            // calc length of lost block
             for (i = 1; i < len && i < cache && !presence[i]; i++);
+
             if (i < cache) {
                 memmove(buffer, buffer + i * ss, (cache - i) * ss);
                 memmove(presence, presence + i, cache - i);
@@ -164,7 +165,7 @@ void output_play(int fd, int64_t ts, long samples,
     if (lost)
         report_lost(lost);
 
-    off = ts - outpos;
+    off = (long) (ts - outpos);
     memcpy(buffer + off * ss, data, size);
     memset(presence + off, 1, samples);
 }
