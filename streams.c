@@ -20,12 +20,12 @@
  *  USA.
  */
 
+#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 #include <arpa/inet.h>
-#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <errno.h>
@@ -161,12 +161,13 @@ struct stream *recvvban(int sock)
     int64_t delta2;
     struct stream *stream;
     struct sockaddr_storage addr;
+    struct timespec tspec;
     struct vbaninfo info;
     struct iovec iov[2];
     struct cmsghdr *cm;
     struct msghdr m;
     ssize_t size;
-    int found_tv;
+    int found_ts;
 
     buffer = malloc(DATA_BUFFER_SIZE);
     if (!buffer) {
@@ -312,15 +313,15 @@ struct stream *recvvban(int sock)
         }
 
         // save timestamp
-        found_tv = 0;
+        found_ts = 0;
         for (cm = CMSG_FIRSTHDR(&m); cm; cm = CMSG_NXTHDR(&m, cm))
-            if (cm->cmsg_level == SOL_SOCKET && cm->cmsg_type == SCM_TIMESTAMP) {
-                memcpy(&stream->tv, CMSG_DATA(cm), sizeof(struct timeval));
-                found_tv++;
+            if (cm->cmsg_level == SOL_SOCKET && cm->cmsg_type == SCM_TIMESTAMPNS) {
+                memcpy(&tspec, CMSG_DATA(cm), sizeof(struct timespec));
+                found_ts++;
             }
 
-        if (!found_tv) {
-            fprintf(stderr, "[%s] couldn't find SCM_TIMESTAMP data in auxiliary recvmsg() data!\n",
+        if (!found_ts) {
+            fprintf(stderr, "[%s] couldn't find SCM_TIMESTAMPNS data in auxiliary recvmsg() data!\n",
                     stream->name);
             free(buffer);
             return NULL;
@@ -331,9 +332,11 @@ struct stream *recvvban(int sock)
             if (stream->prev)
                 free(stream->prev);
 
+            stream->expected++;
+            stream->tsprev = stream->tscurr;
+            stream->tscurr = tspec;
             stream->prev = stream->curr;
             stream->curr = buffer;
-            stream->expected++;
             return stream;
         }
 
@@ -374,9 +377,11 @@ struct stream *recvvban(int sock)
         if (stream->curr)
             free(stream->curr);
 
+        stream->expected = info.seq + 1;
+        stream->tsprev = (struct timespec){ 0, 0 };
+        stream->tscurr = tspec;
         stream->prev = NULL;
         stream->curr = buffer;
-        stream->expected = info.seq + 1;
         return stream;
     }
 }

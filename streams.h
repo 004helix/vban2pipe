@@ -23,8 +23,8 @@
 #ifndef _STREAMS_H
 #define _STREAMS_H 1
 
+#include <time.h>
 #include <stdint.h>
-#include <sys/time.h>
 #include <sys/socket.h>
 #include "vban.h"
 
@@ -40,24 +40,25 @@ struct stream {
     char name[20];
 
     // data format
-    long samples;        // samples per packet
-    long sample_size;    // sample size in bytes
-    long sample_rate;    // sample rate
-    long channels;       // channels
-    long datasize;       // total bytes in one packet
-    long datatype;       // stream format (VBAN)
-    char *dtname;        // sample format name
+    long samples;           // samples per packet
+    long sample_size;       // sample size in bytes
+    long sample_rate;       // sample rate
+    long channels;          // channels
+    long datasize;          // total bytes in one packet
+    long datatype;          // stream format (VBAN)
+    char *dtname;           // sample format name
 
     // stream counters
-    uint32_t expected;   // next expected packet number in this stream
-    struct timeval tv;   // time of the last received packet
-    char *curr;          // current packet in stream
-    char *prev;          // previous packet in stream
+    uint32_t expected;      // next expected packet number in this stream
+    struct timespec tsprev; // time of the last received packet
+    struct timespec tscurr; // time of the last received packet
+    char *curr;             // current packet in stream
+    char *prev;             // previous packet in stream
 
     // synchronization
-    long ignore;         // ignore this stream
-    long insync;         // synchronized with primary stream
-    int64_t offset;      // stream offset
+    long ignore;            // ignore this stream
+    long insync;            // synchronized with primary stream
+    int64_t offset;         // stream offset
 
     // next stream
     struct stream *next;

@@ -105,7 +105,7 @@ int syncstreams(struct stream *stream1, struct stream *stream2, int64_t *offset)
 
     matches = 0;
     w = stream1->sample_size * stream1->channels;
-    for (i = 0; i < size; i += w)
+    for (i = 0; i <= size; i += w)
         if (!memcmp(data1, data2 + i, size)) {
             if (matches == 0) {
                 *offset = (int64_t) stream2->expected - 1;
@@ -117,6 +117,18 @@ int syncstreams(struct stream *stream1, struct stream *stream2, int64_t *offset)
         }
 
     return matches;
+}
+
+
+void dump_streams(int signo)
+{
+    struct stream *stream;
+
+    for (stream = streams; stream; stream = stream->next) {
+        fprintf(stderr, "[%s] expected: %lu, insync: %ld, offset: %lld\n",
+                stream->name, (long unsigned) stream->expected,
+                stream->insync, (long long unsigned) stream->offset);
+    }
 }
 
 
@@ -138,15 +150,15 @@ void run(int sock, int pipefd)
             if (dead == stream)
                 continue;
 
-            msec = (long) (stream->tv.tv_sec - dead->tv.tv_sec) * 1000L;
-            msec += (long) (stream->tv.tv_usec - dead->tv.tv_usec) / 1000L;
+            msec = (long) (stream->tscurr.tv_sec - dead->tscurr.tv_sec) * 1000L;
+            msec += (long) (stream->tscurr.tv_nsec - dead->tscurr.tv_nsec) / 1000000L;
 
             if (msec < STREAM_TIMEOUT_MSEC)
                 continue;
 
             if (dead == streams) {
                 // primary stream died
-                // fix offsets and out position
+                // fix offsets and output position
                 struct stream *curr;
                 int64_t delta;
 
@@ -209,8 +221,8 @@ void run(int sock, int pipefd)
 
             if (matches == 1) {
                 if (stream->insync++ && stream->offset != offset) {
-                    // offset mismatch, pause (~250ms) and try to sync again
-                    stream->insync = -(long) (stream->sample_rate / stream->samples / 4);
+                    // offset mismatch, pause (~100ms) and try to sync again
+                    stream->insync = -(long) (stream->sample_rate / stream->samples / 10);
                     continue;
                 }
 
@@ -221,8 +233,8 @@ void run(int sock, int pipefd)
                 stream->offset = offset;
             } else {
                 if (stream->insync == 0)
-                    // still cant sync, pause (~250ms) stream for a while
-                    stream->insync = -(long) (stream->sample_rate / stream->samples / 4);
+                    // still cant sync, pause (~100ms) stream for a while
+                    stream->insync = -(long) (stream->sample_rate / stream->samples / 10);
             }
 
             continue;
@@ -244,6 +256,7 @@ int main(int argc, char **argv)
 
     signal(SIGPIPE, SIG_IGN);
     signal(SIGCHLD, SIG_IGN);
+    signal(SIGUSR1, dump_streams);
 
     // check command line arguments
     if (argc < 3) {
@@ -283,9 +296,9 @@ int main(int argc, char **argv)
                    sizeof(timeout)) < 0)
         error("setsockopt failed");
 
-    // set SO_TIMESTAMP
+    // set SO_TIMESTAMPNS
     optval = 1;
-    if (setsockopt(sock, SOL_SOCKET, SO_TIMESTAMP, &optval,
+    if (setsockopt(sock, SOL_SOCKET, SO_TIMESTAMPNS, &optval,
                    sizeof(optval)) < 0)
         error("setsockopt failed");
 
