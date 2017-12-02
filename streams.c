@@ -193,8 +193,10 @@ struct stream *recvvban(int sock)
         if (size < 0 && errno == EINTR)
             continue;
 
-        if (size < 0 && errno == EAGAIN)
+        if (size < 0 && errno == EAGAIN) {
+            free(buffer);
             return NULL;
+        }
 
         if (size < 0) {
             fprintf(stderr, "recvmsg: %s\n", strerror(errno));
@@ -303,8 +305,8 @@ struct stream *recvvban(int sock)
                     stream->name, peer, stream->dtname, stream->sample_rate, stream->channels);
 
             if (streams) {
-                struct stream *tail;
-                for (tail = streams; tail->next; tail = tail->next);
+                struct stream *tail = streams;
+                for (; tail->next; tail = tail->next);
                 tail->next = stream;
             } else {
                 streams = stream;
