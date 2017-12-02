@@ -20,15 +20,43 @@
  *  USA.
  */
 
-#ifndef _OUTPUT_H
-#define _OUTPUT_H 1
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdarg.h>
+#include <string.h>
+#include <unistd.h>
 
-#include <stdint.h>
+#include "logger.h"
 
-void output_dump();
-void output_init(long cache_size);
-void output_move(int64_t offset);
-void output_play(int fd, int64_t ts, long samples,
-                 const char *data, long size);
+static char buffer[16384];
+static int verbose;
 
-#endif
+
+void logger_init(void)
+{
+    verbose = LOG_INF;
+
+    if (getenv("VERBOSE"))
+        verbose = LOG_VRB;
+
+    if (getenv("DEBUG"))
+        verbose = LOG_DBG;
+}
+
+
+void logger(int level, const char* format, ...)
+{
+    if (level <= verbose) {
+        va_list ap;
+        int size;
+
+        va_start(ap, format);
+        size = vsnprintf(buffer, sizeof(buffer), format, ap);
+        va_end(ap);
+
+        if (!size || buffer[size - 1] != '\n')
+            buffer[size++] = '\n';
+
+        write(STDERR_FILENO, buffer, (size_t) size);
+    }
+}

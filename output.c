@@ -30,20 +30,33 @@
 #include <errno.h>
 
 #include "output.h"
+#include "logger.h"
 
 
 static int64_t outpos;
 static long cache = 512; // samples
 static char *presence = NULL;
 static char *buffer = NULL;
+static long lost_total;
 
 
 static void report_lost(long lost)
 {
+    lost_total += lost;
+
     if (lost == 1)
-        fprintf(stderr, "<out> lost 1 sample\n");
+        logger(LOG_INF, "<out> lost 1 sample");
     else
-        fprintf(stderr, "<out> lost %ld samples\n", lost);
+        logger(LOG_INF, "<out> lost %ld samples", lost);
+}
+
+
+void output_dump(void)
+{
+    if (lost_total == 1)
+        logger(LOG_INF, "<out> total lost 1 sample");
+    else
+        logger(LOG_INF, "<out> total lost %ld samples", lost_total);
 }
 
 
@@ -57,6 +70,7 @@ void output_init(long cache_size)
 
     buffer = NULL;
     presence = NULL;
+    lost_total = 0;
     cache = cache_size;
 }
 
@@ -129,9 +143,9 @@ void output_play(int fd, int64_t ts, long samples,
             if (write(fd, buffer, i * ss) < 0) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
                     // report override can be very noisy if source suspended
-                    // fprintf(stderr, "output overrun: %ld samples\n", i);
+                    logger(LOG_DBG, "output overrun: %ld samples", i);
                 } else {
-                    fprintf(stderr, "write failed: %s\n", strerror(errno));
+                    logger(LOG_ERR, "write failed: %s", strerror(errno));
                     exit(1);
                 }
             }

@@ -20,15 +20,16 @@
  *  USA.
  */
 
-#ifndef _OUTPUT_H
-#define _OUTPUT_H 1
+#ifndef _LOGGER_H
+#define _LOGGER_H 1
 
-#include <stdint.h>
+#define LOG_ERR 0
+#define LOG_INF 1
+#define LOG_VRB 2
+#define LOG_DBG 3
 
-void output_dump();
-void output_init(long cache_size);
-void output_move(int64_t offset);
-void output_play(int fd, int64_t ts, long samples,
-                 const char *data, long size);
+void logger_init(void);
+void logger(int level, const char *format, ...)
+    __attribute__ ((format (printf, 2, 3)));
 
 #endif

@@ -31,6 +31,7 @@
 #include <errno.h>
 
 #include "vban.h"
+#include "logger.h"
 #include "streams.h"
 
 #define DATA_BUFFER_SIZE 1436
@@ -49,7 +50,7 @@ void forgetstreams(void)
         struct stream *del = stream;
         stream = stream->next;
 
-        fprintf(stderr, "[%s] stream offline\n", del->name);
+        logger(LOG_INF, "[%s] stream offline", del->name);
 
         if (del->curr.data)
             free(del->curr.data);
@@ -69,7 +70,7 @@ void forgetstreams(void)
  */
 void forgetstream(struct stream *stream)
 {
-    fprintf(stderr, "[%s] stream offline\n", stream->name);
+    logger(LOG_INF, "[%s] stream offline", stream->name);
 
     if (stream == streams) {
         streams = stream->next;
@@ -170,7 +171,7 @@ struct stream *recvvban(int sock)
 
     buffer = malloc(DATA_BUFFER_SIZE);
     if (!buffer) {
-        fprintf(stderr, "cannot allocate memory!\n");
+        logger(LOG_ERR, "cannot allocate memory!");
         return NULL;
     }
 
@@ -199,23 +200,23 @@ struct stream *recvvban(int sock)
         }
 
         if (size < 0) {
-            fprintf(stderr, "recvmsg: %s\n", strerror(errno));
+            logger(LOG_ERR, "recvmsg: %s", strerror(errno));
             free(buffer);
             return NULL;
         }
 
         if (vban_parse(vban_header, size, &info) < 0) {
-            fprintf(stderr, "malformed VBAN packet received\n");
+            logger(LOG_VRB, "malformed VBAN packet received");
             continue;
         }
 
         if (info.protocol != VBAN_PROTOCOL_AUDIO) {
-            fprintf(stderr, "[%s] unsupporded protocol\n", info.name);
+            logger(LOG_VRB, "[%s] unsupporded protocol", info.name);
             continue;
         }
 
         if (info.codec != VBAN_CODEC_PCM) {
-            fprintf(stderr, "[%s] unsupported audio codec\n", info.name);
+            logger(LOG_VRB, "[%s] unsupported audio codec", info.name);
             continue;
         }
 
@@ -225,11 +226,11 @@ struct stream *recvvban(int sock)
         if (stream) {
             // check packet size
             if (size < stream->datasize) {
-                fprintf(stderr, "[%s] too short packet received\n", info.name);
+                logger(LOG_VRB, "[%s] too short packet received", info.name);
                 continue;
             } else
             if (size > stream->datasize) {
-                fprintf(stderr, "[%s] too long packet received\n", info.name);
+                logger(LOG_VRB, "[%s] too long packet received", info.name);
                 continue;
             }
 
@@ -238,7 +239,7 @@ struct stream *recvvban(int sock)
                 stream->datatype != info.datatype ||
                 stream->channels != info.channels ||
                 stream->sample_rate != info.sample_rate) {
-                fprintf(stderr, "[%s] bad packet received\n", info.name);
+                logger(LOG_VRB, "[%s] bad packet received", info.name);
                 continue;
             }
         } else {
@@ -262,20 +263,14 @@ struct stream *recvvban(int sock)
                 };
 #endif
                 default:
-                    fprintf(stderr, "[%s] unsupported address family\n", info.name);
+                    logger(LOG_ERR, "[%s] unsupported address family", info.name);
                     continue;
-            }
-
-            // check data size
-            if (size != info.samples * info.sample_size * info.channels) {
-                fprintf(stderr, "[%s] invalid packet size\n", info.name);
-                continue;
             }
 
             // create new stream entry
             stream = malloc(sizeof(struct stream));
             if (!stream) {
-                fprintf(stderr, "[%s] cannot allocate memory\n", info.name);
+                logger(LOG_ERR, "[%s] cannot allocate memory", info.name);
                 free(buffer);
                 return NULL;
             }
@@ -291,6 +286,7 @@ struct stream *recvvban(int sock)
             stream->datatype = info.datatype;
             stream->dtname = info.dtname;
 
+            stream->lost = 0;
             stream->expected = info.seq;
             stream->curr.data = NULL;
             stream->prev.data = NULL;
@@ -301,8 +297,8 @@ struct stream *recvvban(int sock)
 
             stream->next = NULL;
 
-            fprintf(stderr, "[%s] stream connected from %s, %s, %ld Hz, %ld channel(s)\n",
-                    stream->name, peer, stream->dtname, stream->sample_rate, stream->channels);
+            logger(LOG_INF, "[%s] stream connected from %s, %s, %ld Hz, %ld channel(s)",
+                   stream->name, peer, stream->dtname, stream->sample_rate, stream->channels);
 
             if (streams) {
                 struct stream *tail = streams;
@@ -322,8 +318,8 @@ struct stream *recvvban(int sock)
             }
 
         if (!found_ts) {
-            fprintf(stderr, "[%s] couldn't find SCM_TIMESTAMPNS data in auxiliary recvmsg() data!\n",
-                    stream->name);
+            logger(LOG_ERR, "[%s] couldn't find SCM_TIMESTAMPNS data in auxiliary recvmsg() data!",
+                   stream->name);
             free(buffer);
             return NULL;
         }
@@ -357,40 +353,42 @@ struct stream *recvvban(int sock)
             // received lost packet
             if (delta == -1 || (delta == -2 && stream->prev.data)) {
                 // duplicate
-                fprintf(stderr, "[%s] expected %lu, got %lu: duplicate?\n",
-                        info.name, (long unsigned) stream->expected,
-                        (long unsigned) info.seq);
+                logger(LOG_DBG, "[%s] expected %lu, got %lu: duplicate?",
+                       info.name, (long unsigned) stream->expected,
+                       (long unsigned) info.seq);
                 continue;
             }
 
             // received previous packet
             if (delta == -2 && !stream->prev.data) {
                 // restore previous packet
+                stream->lost--;
                 stream->prev.data = buffer;
                 stream->prev.sent = 0;
 
-                fprintf(stderr, "[%s] expected %lu, got %lu: restored\n",
-                        info.name, (long unsigned) stream->expected,
-                        (long unsigned) info.seq);
+                logger(LOG_DBG, "[%s] expected %lu, got %lu: restored",
+                       info.name, (long unsigned) stream->expected,
+                       (long unsigned) info.seq);
 
                 return stream;
             }
 
-            fprintf(stderr, "[%s] expected %lu, got %lu: dropped\n",
-                    info.name, (long unsigned) stream->expected,
-                    (long unsigned) info.seq);
+            logger(LOG_DBG, "[%s] expected %lu, got %lu: dropped",
+                   info.name, (long unsigned) stream->expected,
+                   (long unsigned) info.seq);
             continue;
         }
 
         // lost packets
+        stream->lost += (long) delta;
         if (delta == 1)
-            fprintf(stderr, "[%s] expected %lu, got %lu: lost 1 packet\n",
-                    info.name, (long unsigned) stream->expected,
-                    (long unsigned) info.seq);
+            logger(LOG_DBG, "[%s] expected %lu, got %lu: lost 1 packet",
+                   info.name, (long unsigned) stream->expected,
+                   (long unsigned) info.seq);
         else
-            fprintf(stderr, "[%s] expected %lu, got %lu: lost %lld packets\n",
-                    info.name, (long unsigned) stream->expected,
-                    (long unsigned) info.seq, (long long) delta);
+            logger(LOG_DBG, "[%s] expected %lu, got %lu: lost %lld packets",
+                   info.name, (long unsigned) stream->expected,
+                   (long unsigned) info.seq, (long long) delta);
 
         if (stream->prev.data)
             free(stream->prev.data);

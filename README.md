@@ -42,14 +42,13 @@ $ vban2pipe 6980 /tmp/vban.input
 [Stream2] stream online, offset -180480 samples
 [Stream3] stream connected from 172.16.0.2:56505, s16le, 48000 Hz, 2 channel(s)
 [Stream3] stream online, offset -435456 samples
-[Stream1] expected 3512424, got 3512425: lost 1 packet
-[Stream2] expected 3512422, got 3512425: lost 3 packets
-[Stream3] expected 6103348, got 6103349: lost 1 packet
 ...
 ```
 
 If lost packets cannot be restored, vban2pipe reports lost output:
 ```
+$ export DEBUG=1
+$ vban2pipe 6980 /tmp/vban.input
 ...
 [Stream2] expected 3490818, got 3490821: lost 3 packets
 [Stream3] expected 3490818, got 3490821: lost 3 packets

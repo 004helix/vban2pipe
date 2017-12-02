@@ -40,6 +40,7 @@
 #include "vban.h"
 #include "streams.h"
 #include "output.h"
+#include "logger.h"
 
 
 #define STREAM_TIMEOUT_MSEC 700
@@ -53,11 +54,13 @@
 static char *onconnect = NULL;
 static char *ondisconnect = NULL;
 
+
 static void error(char *msg)
 {
-    perror(msg);
+    logger(LOG_ERR, "%s: %s", msg, strerror(errno));
     exit(1);
 }
+
 
 static void runhook(char *prog)
 {
@@ -66,16 +69,36 @@ static void runhook(char *prog)
 
     switch (pid) {
         case -1:
-            fprintf(stderr, "exec failed, unable to fork: %s\n", strerror(errno));
+            logger(LOG_ERR, "exec failed, unable to fork: %s", strerror(errno));
             return;
         case 0:
             argv[0] = prog;
             argv[1] = NULL;
             execvp(prog, argv);
-            fprintf(stderr, "execvp failed: %s\n", strerror(errno));
+            logger(LOG_ERR, "execvp failed: %s", strerror(errno));
             exit(1);
         break;
     }
+}
+
+
+static void dump(int signo)
+{
+    struct stream *stream;
+
+    logger(LOG_INF, "--- dump ---");
+
+    for (stream = streams; stream; stream = stream->next) {
+        char *role = stream == streams ? "primary" : "backup";
+        char *insync = stream->insync < 3 ? "no" : "yes";
+        logger(LOG_INF, "[%s] expected: %lu, insync: %s, lost: %ld, offset: %lld, %s",
+               stream->name, (long unsigned) stream->expected, insync,
+               stream->lost, (long long unsigned) stream->offset, role);
+    }
+
+    output_dump();
+
+    logger(LOG_INF, "------------");
 }
 
 
@@ -120,23 +143,11 @@ int syncstreams(struct stream *stream1, struct stream *stream2, int64_t *offset)
 }
 
 
-void dump_streams(int signo)
-{
-    struct stream *stream;
-
-    for (stream = streams; stream; stream = stream->next) {
-        fprintf(stderr, "[%s] expected: %lu, insync: %ld, offset: %lld\n",
-                stream->name, (long unsigned) stream->expected,
-                stream->insync, (long long unsigned) stream->offset);
-    }
-}
-
-
 void run(int sock, int pipefd)
 {
     struct stream *stream, *dead;
 
-    while (1) {
+    for (;;) {
         stream = recvvban(sock);
 
         if (!stream)
@@ -194,8 +205,7 @@ void run(int sock, int pipefd)
             int matches;
 
             if (stream == primary) {
-                fprintf(stderr, "[%s] stream online, primary\n",
-                        stream->name);
+                logger(LOG_INF, "[%s] stream online, primary", stream->name);
 
                 output_init(stream->samples * BUFFER_OUT_PACKETS);
                 if (onconnect)
@@ -208,8 +218,8 @@ void run(int sock, int pipefd)
             matches = syncstreams(primary, stream, &offset);
 
             if (matches < 0) {
-                fprintf(stderr, "[%s] stream didnt match primary stream\n",
-                        stream->name);
+                logger(LOG_INF, "[%s] stream didnt match primary stream, ignoring",
+                       stream->name);
                 stream->ignore++;
                 continue;
             }
@@ -227,8 +237,8 @@ void run(int sock, int pipefd)
                 }
 
                 if (stream->insync == 3)
-                    fprintf(stderr, "[%s] stream online, offset %lld samples\n",
-                            stream->name, (long long) offset);
+                    logger(LOG_INF, "[%s] stream online, offset %lld samples",
+                           stream->name, (long long) offset);
 
                 stream->offset = offset;
             } else {
@@ -263,20 +273,22 @@ int main(int argc, char **argv)
     struct sockaddr_in addr;
     struct timeval timeout;
 
+    logger_init();
+
     signal(SIGPIPE, SIG_IGN);
     signal(SIGCHLD, SIG_IGN);
-    signal(SIGUSR1, dump_streams);
+    signal(SIGUSR1, dump);
 
     // check command line arguments
     if (argc < 3) {
-        fprintf(stderr, "usage: %s <port> <pipe> [exec-on-connect] [exec-on-disconnect]\n", argv[0]);
+        logger(LOG_ERR, "usage: %s <port> <pipe> [exec-on-connect] [exec-on-disconnect]", argv[0]);
         return 1;
     }
 
     // parse port
     port = atoi(argv[1]);
     if (port <= 0 || port > 65535) {
-        fprintf(stderr, "bad port: %s\n", argv[1]);
+        logger(LOG_ERR, "bad port: %s", argv[1]);
         return 1;
     }
 

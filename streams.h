@@ -54,6 +54,7 @@ struct stream {
     char *dtname;           // sample format name
 
     // stream counters
+    long lost;              // total lost packets counter
     uint32_t expected;      // next expected packet number in this stream
     struct packet curr;     // current packet in stream
     struct packet prev;     // previous packet in stream
