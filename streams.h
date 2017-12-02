@@ -32,6 +32,11 @@
  * Streams
  */
 
+struct packet {
+    char *data; // packet data
+    int sent; // sent to output
+};
+
 struct stream {
     // remote address
     struct sockaddr_storage peer;
@@ -50,10 +55,9 @@ struct stream {
 
     // stream counters
     uint32_t expected;      // next expected packet number in this stream
-    struct timespec tsprev; // time of the last received packet
-    struct timespec tscurr; // time of the last received packet
-    char *curr;             // current packet in stream
-    char *prev;             // previous packet in stream
+    struct packet curr;     // current packet in stream
+    struct packet prev;     // previous packet in stream
+    struct timespec ts;     // last packet received time
 
     // synchronization
     long ignore;            // ignore this stream

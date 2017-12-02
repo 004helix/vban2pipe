@@ -51,11 +51,11 @@ void forgetstreams(void)
 
         fprintf(stderr, "[%s] stream offline\n", del->name);
 
-        if (del->curr)
-            free(del->curr);
+        if (del->curr.data)
+            free(del->curr.data);
 
-        if (del->prev)
-            free(del->prev);
+        if (del->prev.data)
+            free(del->prev.data);
 
         free(del);
     }
@@ -79,11 +79,11 @@ void forgetstream(struct stream *stream)
         prev->next = stream->next;
     }
 
-    if (stream->curr)
-        free(stream->curr);
+    if (stream->curr.data)
+        free(stream->curr.data);
 
-    if (stream->prev)
-        free(stream->prev);
+    if (stream->prev.data)
+        free(stream->prev.data);
 
     free(stream);
 }
@@ -161,7 +161,6 @@ struct stream *recvvban(int sock)
     int64_t delta2;
     struct stream *stream;
     struct sockaddr_storage addr;
-    struct timespec tspec;
     struct vbaninfo info;
     struct iovec iov[2];
     struct cmsghdr *cm;
@@ -291,8 +290,8 @@ struct stream *recvvban(int sock)
             stream->dtname = info.dtname;
 
             stream->expected = info.seq;
-            stream->curr = NULL;
-            stream->prev = NULL;
+            stream->curr.data = NULL;
+            stream->prev.data = NULL;
 
             stream->ignore = 0;
             stream->insync = 0;
@@ -316,7 +315,7 @@ struct stream *recvvban(int sock)
         found_ts = 0;
         for (cm = CMSG_FIRSTHDR(&m); cm; cm = CMSG_NXTHDR(&m, cm))
             if (cm->cmsg_level == SOL_SOCKET && cm->cmsg_type == SCM_TIMESTAMPNS) {
-                memcpy(&tspec, CMSG_DATA(cm), sizeof(struct timespec));
+                memcpy(&stream->ts, CMSG_DATA(cm), sizeof(struct timespec));
                 found_ts++;
             }
 
@@ -329,14 +328,13 @@ struct stream *recvvban(int sock)
 
         // save data to stream buffers
         if (stream->expected == info.seq) {
-            if (stream->prev)
-                free(stream->prev);
+            if (stream->prev.data)
+                free(stream->prev.data);
 
             stream->expected++;
-            stream->tsprev = stream->tscurr;
-            stream->tscurr = tspec;
             stream->prev = stream->curr;
-            stream->curr = buffer;
+            stream->curr.data = buffer;
+            stream->curr.sent = 0;
             return stream;
         }
 
@@ -355,6 +353,27 @@ struct stream *recvvban(int sock)
 
         if (delta < 0) {
             // received lost packet
+            if (delta == -1 || (delta == -2 && stream->prev.data)) {
+                // duplicate
+                fprintf(stderr, "[%s] expected %lu, got %lu: duplicate?\n",
+                        info.name, (long unsigned) stream->expected,
+                        (long unsigned) info.seq);
+                continue;
+            }
+
+            // received previous packet
+            if (delta == -2 && !stream->prev.data) {
+                // restore previous packet
+                stream->prev.data = buffer;
+                stream->prev.sent = 0;
+
+                fprintf(stderr, "[%s] expected %lu, got %lu: restored\n",
+                        info.name, (long unsigned) stream->expected,
+                        (long unsigned) info.seq);
+
+                return stream;
+            }
+
             fprintf(stderr, "[%s] expected %lu, got %lu: dropped\n",
                     info.name, (long unsigned) stream->expected,
                     (long unsigned) info.seq);
@@ -371,17 +390,17 @@ struct stream *recvvban(int sock)
                     info.name, (long unsigned) stream->expected,
                     (long unsigned) info.seq, (long long) delta);
 
-        if (stream->prev)
-            free(stream->prev);
+        if (stream->prev.data)
+            free(stream->prev.data);
 
-        if (stream->curr)
-            free(stream->curr);
+        if (stream->curr.data)
+            free(stream->curr.data);
 
         stream->expected = info.seq + 1;
-        stream->tsprev = (struct timespec){ 0, 0 };
-        stream->tscurr = tspec;
-        stream->prev = NULL;
-        stream->curr = buffer;
+        stream->prev.data = NULL;
+        stream->prev.sent = 0;
+        stream->curr.data = buffer;
+        stream->curr.sent = 0;
         return stream;
     }
 }

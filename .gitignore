@@ -1,3 +1,4 @@
+core
 build/*.o
 build/*.d
 vban2pipe

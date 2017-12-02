@@ -95,13 +95,13 @@ int syncstreams(struct stream *stream1, struct stream *stream2, int64_t *offset)
     // try to find last packet of stream1
     // in the last two packets of stream2
 
-    if (!stream2->prev)
+    if (!stream2->prev.data)
         // not enough consequitive packets in stream2
         return 0;
 
-    data1 = stream1->curr;
-    memcpy(data2, stream2->prev, size);
-    memcpy(data2 + size, stream2->curr, size);
+    data1 = stream1->curr.data;
+    memcpy(data2, stream2->prev.data, size);
+    memcpy(data2 + size, stream2->curr.data, size);
 
     matches = 0;
     w = stream1->sample_size * stream1->channels;
@@ -150,8 +150,8 @@ void run(int sock, int pipefd)
             if (dead == stream)
                 continue;
 
-            msec = (long) (stream->tscurr.tv_sec - dead->tscurr.tv_sec) * 1000L;
-            msec += (long) (stream->tscurr.tv_nsec - dead->tscurr.tv_nsec) / 1000000L;
+            msec = (long) (stream->ts.tv_sec - dead->ts.tv_sec) * 1000L;
+            msec += (long) (stream->ts.tv_nsec - dead->ts.tv_nsec) / 1000000L;
 
             if (msec < STREAM_TIMEOUT_MSEC)
                 continue;
@@ -240,10 +240,19 @@ void run(int sock, int pipefd)
             continue;
         }
 
-        // play data
-        output_play(pipefd,
-                    stream->expected * stream->samples - stream->offset,
-                    stream->samples, stream->curr, stream->datasize);
+        if (stream->prev.data && stream->prev.sent == 0) {
+            output_play(pipefd,
+                        (stream->expected - 1) * stream->samples - stream->offset,
+                        stream->samples, stream->prev.data, stream->datasize);
+            stream->prev.sent++;
+        }
+
+        if (stream->curr.sent == 0) {
+            output_play(pipefd,
+                        stream->expected * stream->samples - stream->offset,
+                        stream->samples, stream->curr.data, stream->datasize);
+            stream->curr.sent++;
+        }
     }
 }
 
