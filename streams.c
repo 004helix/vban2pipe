@@ -28,6 +28,7 @@
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <net/if.h>
 #include <errno.h>
 
 #include "vban.h"
@@ -50,7 +51,7 @@ void forgetstreams(void)
         struct stream *del = stream;
         stream = stream->next;
 
-        logger(LOG_INF, "[%s] stream offline", del->name);
+        logger(LOG_INF, "[%s@%s] stream offline", del->name, del->ifname);
 
         if (del->curr.data)
             free(del->curr.data);
@@ -70,7 +71,7 @@ void forgetstreams(void)
  */
 void forgetstream(struct stream *stream)
 {
-    logger(LOG_INF, "[%s] stream offline", stream->name);
+    logger(LOG_INF, "[%s@%s] stream offline", stream->name, stream->ifname);
 
     if (stream == streams) {
         streams = stream->next;
@@ -93,7 +94,7 @@ void forgetstream(struct stream *stream)
 /*
  * Find stream for the packet
  */
-struct stream *getstream(struct vbaninfo *info, struct sockaddr *addr)
+struct stream *getstream(struct vbaninfo *info, struct sockaddr *addr, unsigned ifindex)
 {
     struct stream *stream;
 
@@ -102,6 +103,10 @@ struct stream *getstream(struct vbaninfo *info, struct sockaddr *addr)
 
     for (stream = streams; stream; stream = stream->next) {
         struct sockaddr *peer = (void *) &stream->peer;
+
+        // check interface
+        if (stream->ifindex != ifindex)
+            continue;
 
         // check peer address family
         if (peer->sa_family != addr->sa_family)
@@ -160,14 +165,17 @@ struct stream *recvvban(int sock)
     int64_t delta;
     int64_t delta1;
     int64_t delta2;
+    unsigned ifindex;
     struct stream *stream;
     struct sockaddr_storage addr;
     struct vbaninfo info;
     struct iovec iov[2];
+    struct timespec ts;
     struct cmsghdr *cm;
     struct msghdr m;
-    ssize_t size;
+    int found_idx;
     int found_ts;
+    ssize_t size;
 
     buffer = malloc(DATA_BUFFER_SIZE);
     if (!buffer) {
@@ -205,6 +213,35 @@ struct stream *recvvban(int sock)
             return NULL;
         }
 
+        ifindex = 0;
+        found_ts = 0;
+        found_idx = 0;
+        for (cm = CMSG_FIRSTHDR(&m); cm; cm = CMSG_NXTHDR(&m, cm)) {
+            if (cm->cmsg_level == IPPROTO_IP && cm->cmsg_type == IP_PKTINFO) {
+                struct in_pktinfo *ipi = CMSG_DATA(cm);
+                ifindex = ipi->ipi_ifindex;
+                found_idx++;
+            }
+            if (cm->cmsg_level == SOL_SOCKET && cm->cmsg_type == SCM_TIMESTAMPNS) {
+                memcpy(&ts, CMSG_DATA(cm), sizeof(ts));
+                found_ts++;
+            }
+        }
+
+        if (!found_idx) {
+            logger(LOG_ERR, "[%s@%s] couldn't find IP_PKTINFO data in auxiliary recvmsg() data!",
+                   stream->name, stream->ifname);
+            free(buffer);
+            return NULL;
+        }
+
+        if (!found_ts) {
+            logger(LOG_ERR, "[%s@%s] couldn't find SCM_TIMESTAMPNS data in auxiliary recvmsg() data!",
+                   stream->name, stream->ifname);
+            free(buffer);
+            return NULL;
+        }
+
         if (vban_parse(vban_header, size, &info) < 0) {
             logger(LOG_VRB, "malformed VBAN packet received");
             continue;
@@ -220,17 +257,19 @@ struct stream *recvvban(int sock)
             continue;
         }
 
-        stream = getstream(&info, (struct sockaddr *) &addr);
+        stream = getstream(&info, (struct sockaddr *) &addr, ifindex);
         size -= VBAN_HEADER_SIZE;
 
         if (stream) {
             // check packet size
             if (size < stream->datasize) {
-                logger(LOG_VRB, "[%s] too short packet received", info.name);
+                logger(LOG_VRB, "[%s@%s] too short packet received",
+                       stream->name, stream->ifname);
                 continue;
             } else
             if (size > stream->datasize) {
-                logger(LOG_VRB, "[%s] too long packet received", info.name);
+                logger(LOG_VRB, "[%s@%s] too long packet received",
+                       stream->name, stream->ifname);
                 continue;
             }
 
@@ -239,7 +278,8 @@ struct stream *recvvban(int sock)
                 stream->datatype != info.datatype ||
                 stream->channels != info.channels ||
                 stream->sample_rate != info.sample_rate) {
-                logger(LOG_VRB, "[%s] bad packet received", info.name);
+                logger(LOG_VRB, "[%s@%s] bad packet received",
+                       stream->name, stream->ifname);
                 continue;
             }
         } else {
@@ -275,6 +315,10 @@ struct stream *recvvban(int sock)
                 return NULL;
             }
 
+            // parse interface index
+            stream->ifindex = ifindex;
+            if_indextoname(ifindex, stream->ifname);
+
             memcpy(&stream->peer, &addr, sizeof(struct sockaddr_storage));
             strcpy(stream->name, info.name);
 
@@ -297,8 +341,9 @@ struct stream *recvvban(int sock)
 
             stream->next = NULL;
 
-            logger(LOG_INF, "[%s] stream connected from %s, %s, %ld Hz, %ld channel(s)",
-                   stream->name, peer, stream->dtname, stream->sample_rate, stream->channels);
+            logger(LOG_INF, "[%s@%s] stream connected from %s, %s, %ld Hz, %ld channel(s)",
+                   stream->name, stream->ifname, peer, stream->dtname,
+                   stream->sample_rate, stream->channels);
 
             if (streams) {
                 struct stream *tail = streams;
@@ -309,20 +354,8 @@ struct stream *recvvban(int sock)
             }
         }
 
-        // save timestamp
-        found_ts = 0;
-        for (cm = CMSG_FIRSTHDR(&m); cm; cm = CMSG_NXTHDR(&m, cm))
-            if (cm->cmsg_level == SOL_SOCKET && cm->cmsg_type == SCM_TIMESTAMPNS) {
-                memcpy(&stream->ts, CMSG_DATA(cm), sizeof(struct timespec));
-                found_ts++;
-            }
-
-        if (!found_ts) {
-            logger(LOG_ERR, "[%s] couldn't find SCM_TIMESTAMPNS data in auxiliary recvmsg() data!",
-                   stream->name);
-            free(buffer);
-            return NULL;
-        }
+        // update timestamp
+        stream->ts = ts;
 
         // save data to stream buffers
         if (stream->expected == info.seq) {
@@ -353,8 +386,8 @@ struct stream *recvvban(int sock)
             // received lost packet
             if (delta == -1 || (delta == -2 && stream->prev.data)) {
                 // duplicate
-                logger(LOG_DBG, "[%s] expected %lu, got %lu: duplicate?",
-                       info.name, (long unsigned) stream->expected,
+                logger(LOG_DBG, "[%s@%s] expected %lu, got %lu: duplicate?",
+                       stream->name, stream->ifname, (long unsigned) stream->expected,
                        (long unsigned) info.seq);
                 continue;
             }
@@ -366,15 +399,15 @@ struct stream *recvvban(int sock)
                 stream->prev.data = buffer;
                 stream->prev.sent = 0;
 
-                logger(LOG_DBG, "[%s] expected %lu, got %lu: restored",
-                       info.name, (long unsigned) stream->expected,
+                logger(LOG_DBG, "[%s@%s] expected %lu, got %lu: restored",
+                       stream->name, stream->ifname, (long unsigned) stream->expected,
                        (long unsigned) info.seq);
 
                 return stream;
             }
 
-            logger(LOG_DBG, "[%s] expected %lu, got %lu: dropped",
-                   info.name, (long unsigned) stream->expected,
+            logger(LOG_DBG, "[%s@%s] expected %lu, got %lu: dropped",
+                   stream->name, stream->ifname, (long unsigned) stream->expected,
                    (long unsigned) info.seq);
             continue;
         }
@@ -382,12 +415,12 @@ struct stream *recvvban(int sock)
         // lost packets
         stream->lost += (long) delta;
         if (delta == 1)
-            logger(LOG_DBG, "[%s] expected %lu, got %lu: lost 1 packet",
-                   info.name, (long unsigned) stream->expected,
+            logger(LOG_DBG, "[%s@%s] expected %lu, got %lu: lost 1 packet",
+                   stream->name, stream->ifname, (long unsigned) stream->expected,
                    (long unsigned) info.seq);
         else
-            logger(LOG_DBG, "[%s] expected %lu, got %lu: lost %lld packets",
-                   info.name, (long unsigned) stream->expected,
+            logger(LOG_DBG, "[%s@%s] expected %lu, got %lu: lost %lld packets",
+                   stream->name, stream->ifname, (long unsigned) stream->expected,
                    (long unsigned) info.seq, (long long) delta);
 
         if (stream->prev.data)

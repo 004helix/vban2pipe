@@ -91,8 +91,8 @@ static void dump(int signo)
     for (stream = streams; stream; stream = stream->next) {
         char *role = stream == streams ? "primary" : "backup";
         char *insync = stream->insync < 3 ? "no" : "yes";
-        logger(LOG_INF, "[%s] expected: %lu, insync: %s, lost: %ld, offset: %lld, %s",
-               stream->name, (long unsigned) stream->expected, insync,
+        logger(LOG_INF, "[%s@%s] expected: %lu, insync: %s, lost: %ld, offset: %lld, %s",
+               stream->name, stream->ifname, (long unsigned) stream->expected, insync,
                stream->lost, (long long unsigned) stream->offset, role);
     }
 
@@ -205,7 +205,7 @@ void run(int sock, int pipefd)
             int matches;
 
             if (stream == primary) {
-                logger(LOG_INF, "[%s] stream online, primary", stream->name);
+                logger(LOG_INF, "[%s@%s] stream online, primary", stream->name, stream->ifname);
 
                 output_init(stream->samples * BUFFER_OUT_PACKETS);
                 if (onconnect)
@@ -218,8 +218,8 @@ void run(int sock, int pipefd)
             matches = syncstreams(primary, stream, &offset);
 
             if (matches < 0) {
-                logger(LOG_INF, "[%s] stream didnt match primary stream, ignoring",
-                       stream->name);
+                logger(LOG_INF, "[%s@%s] stream didnt match primary stream, ignoring",
+                       stream->name, stream->ifname);
                 stream->ignore++;
                 continue;
             }
@@ -237,8 +237,8 @@ void run(int sock, int pipefd)
                 }
 
                 if (stream->insync == 3)
-                    logger(LOG_INF, "[%s] stream online, offset %lld samples",
-                           stream->name, (long long) offset);
+                    logger(LOG_INF, "[%s@%s] stream online, offset %lld samples",
+                           stream->name, stream->ifname, (long long) offset);
 
                 stream->offset = offset;
             } else {
@@ -320,6 +320,12 @@ int main(int argc, char **argv)
     // set SO_TIMESTAMPNS
     optval = 1;
     if (setsockopt(sock, SOL_SOCKET, SO_TIMESTAMPNS, &optval,
+                   sizeof(optval)) < 0)
+        error("setsockopt failed");
+
+    // set IP_PKTINFO
+    optval = 1;
+    if (setsockopt(sock, IPPROTO_IP, IP_PKTINFO, &optval,
                    sizeof(optval)) < 0)
         error("setsockopt failed");
 

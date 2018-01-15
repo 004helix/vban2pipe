@@ -25,6 +25,7 @@
 
 #include <time.h>
 #include <stdint.h>
+#include <net/if.h>
 #include <sys/socket.h>
 #include "vban.h"
 
@@ -40,6 +41,10 @@ struct packet {
 struct stream {
     // remote address
     struct sockaddr_storage peer;
+
+    // receiving interface
+    char ifname[IF_NAMESIZE];
+    unsigned ifindex;
 
     // stream name
     char name[20];
@@ -73,7 +78,7 @@ extern struct stream *streams;
 
 void forgetstreams(void);
 void forgetstream(struct stream *);
-struct stream *getstream(struct vbaninfo *, struct sockaddr *);
+struct stream *getstream(struct vbaninfo *, struct sockaddr *, unsigned ifindex);
 struct stream *recvvban(int);
 
 #endif
