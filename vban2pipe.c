@@ -1,7 +1,7 @@
 /*
  *  VBAN Receiver
  *
- *  Copyright (C) 2017 Raman Shyshniou <rommer@ibuffed.com>
+ *  Copyright (C) 2017, 2018 Raman Shyshniou <rommer@ibuffed.com>
  *  All Rights Reserved.
  *
  *  This is free software; you can redistribute it and/or modify
@@ -41,6 +41,7 @@
 #include "streams.h"
 #include "output.h"
 #include "logger.h"
+#include "httpd.h"
 
 
 #define STREAM_TIMEOUT_MSEC 700
@@ -146,12 +147,19 @@ int syncstreams(struct stream *stream1, struct stream *stream2, int64_t *offset)
 void run(int sock, int pipefd)
 {
     struct stream *stream, *dead;
+    time_t stat_sec = 0;
 
     for (;;) {
         stream = recvvban(sock);
 
         if (!stream)
             return;
+
+        // save streams stat every second
+        if (stream->ts.tv_sec != stat_sec) {
+            stat_sec = stream->ts.tv_sec;
+            httpd_update(streams);
+        }
 
         // check dead streams
         for (dead = streams; dead; dead = dead->next) {
@@ -200,12 +208,12 @@ void run(int sock, int pipefd)
 
         // require 3 successfully attempts to sync
         if (stream->insync < 3) {
-            struct stream *primary = streams;
             int64_t offset;
             int matches;
 
-            if (stream == primary) {
-                logger(LOG_INF, "[%s@%s] stream online, primary", stream->name, stream->ifname);
+            if (stream == streams) {
+                logger(LOG_INF, "[%s@%s] stream online, primary",
+                       stream->name, stream->ifname);
 
                 output_init(stream->samples * BUFFER_OUT_PACKETS);
                 if (onconnect)
@@ -215,7 +223,7 @@ void run(int sock, int pipefd)
                 continue;
             }
 
-            matches = syncstreams(primary, stream, &offset);
+            matches = syncstreams(streams, stream, &offset);
 
             if (matches < 0) {
                 logger(LOG_INF, "[%s@%s] stream didnt match primary stream, ignoring",
@@ -225,7 +233,7 @@ void run(int sock, int pipefd)
             }
 
             if (matches == 0) {
-                matches = syncstreams(stream, primary, &offset);
+                matches = syncstreams(stream, streams, &offset);
                 offset = -offset;
             }
 
@@ -269,9 +277,10 @@ void run(int sock, int pipefd)
 
 int main(int argc, char **argv)
 {
-    int port, sock, pipefd, optval = 1;
+    int port, pipefd, optval;
     struct sockaddr_in addr;
     struct timeval timeout;
+    int vbsock, httpdsock;
 
     logger_init();
 
@@ -292,48 +301,6 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // create listen socket
-    sock = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
-    if (sock < 0)
-        error("socket");
-
-    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR,
-               (const void *)&optval , sizeof(optval));
-
-    // server's address to listen on
-    bzero((char *) &addr, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    addr.sin_port = htons((unsigned short)port);
-
-    // bind
-    if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0)
-        error("bind");
-
-    // set receive timeout
-    timeout.tv_sec = STREAM_TIMEOUT_MSEC / 1000000;
-    timeout.tv_usec = (STREAM_TIMEOUT_MSEC % 100000) * 1000;
-    if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout,
-                   sizeof(timeout)) < 0)
-        error("setsockopt failed");
-
-    // set SO_TIMESTAMPNS
-    optval = 1;
-    if (setsockopt(sock, SOL_SOCKET, SO_TIMESTAMPNS, &optval,
-                   sizeof(optval)) < 0)
-        error("setsockopt failed");
-
-    // set IP_PKTINFO
-    optval = 1;
-    if (setsockopt(sock, IPPROTO_IP, IP_PKTINFO, &optval,
-                   sizeof(optval)) < 0)
-        error("setsockopt failed");
-
-    // open pipe
-    pipefd = open(argv[2], O_WRONLY | O_NONBLOCK | O_CLOEXEC);
-    if (pipefd < 0)
-        error("pipe open");
-
     // setup connect/disconnect handlers
     if (argc > 3)
         onconnect = strdup(argv[3]);
@@ -341,15 +308,93 @@ int main(int argc, char **argv)
     if (argc > 4)
         ondisconnect = strdup(argv[4]);
 
-    // run
+    // create UDP (vban) listen socket
+    vbsock = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+    if (vbsock < 0)
+        error("socket");
+
+    // set SO_REUSEADDR
+    optval = 1;
+    if (setsockopt(vbsock, SOL_SOCKET, SO_REUSEADDR,
+                   (const void *)&optval, sizeof(optval)) < 0)
+        error("setsockopt failed");
+
+    // address to listen on
+    bzero((char *) &addr, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    addr.sin_port = htons((unsigned short)port);
+
+    // bind
+    if (bind(vbsock, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+        error("bind");
+
+    // set receive timeout
+    timeout.tv_sec = STREAM_TIMEOUT_MSEC / 1000000;
+    timeout.tv_usec = (STREAM_TIMEOUT_MSEC % 100000) * 1000;
+    if (setsockopt(vbsock, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+                   sizeof(timeout)) < 0)
+        error("setsockopt failed");
+
+    // set SO_TIMESTAMPNS
+    optval = 1;
+    if (setsockopt(vbsock, SOL_SOCKET, SO_TIMESTAMPNS, &optval,
+                   sizeof(optval)) < 0)
+        error("setsockopt failed");
+
+    // set IP_PKTINFO
+    optval = 1;
+    if (setsockopt(vbsock, IPPROTO_IP, IP_PKTINFO, &optval,
+                   sizeof(optval)) < 0)
+        error("setsockopt failed");
+
+    // create TCP (httpd) listen socket
+    httpdsock = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    if (httpdsock < 0)
+        error("socket");
+
+    // set SO_REUSEADDR
+    optval = 1;
+    if (setsockopt(httpdsock, SOL_SOCKET, SO_REUSEADDR,
+                   (const void *)&optval, sizeof(optval)) < 0)
+        error("setsockopt failed");
+
+    // address to listen on
+    bzero((char *) &addr, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    addr.sin_port = htons((unsigned short)port);
+
+    // bind
+    if (bind(httpdsock, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+        error("bind");
+
+    // listen
+    if (listen(httpdsock, 63) < 0)
+        error("listen");
+
+    // open pipe
+    pipefd = open(argv[2], O_WRONLY | O_NONBLOCK | O_CLOEXEC);
+    if (pipefd < 0)
+        error("pipe open");
+
+    // start httpd server
+    if (httpd(httpdsock) < 0)
+        error("httpd start");
+
+    // vban receive loop
     while (1) {
-        run(sock, pipefd);
+        run(vbsock, pipefd);
 
         // disconnect all streams
         if (streams) {
             forgetstreams();
+
             if (ondisconnect)
                 runhook(ondisconnect);
+
+            // update streams stats
+            httpd_update(NULL);
         }
     }
 

@@ -1,8 +1,8 @@
 CC = gcc
 LD = gcc
-CFLAGS = -Wall -Werror
-#CFLAGS = -Wall -g
-LDFLAGS = 
+#CFLAGS = -Wall -Werror
+CFLAGS = -Wall -g
+LDFLAGS = -lpthread
 
 EXE = vban2pipe
 SRC = $(wildcard *.c)
