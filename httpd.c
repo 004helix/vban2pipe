@@ -77,18 +77,15 @@ static char *json_escape(char *src)
 
     for (dst = buffer; *src; src++)
         switch (*src) {
-            case '"':
-            case '\\':
-            case '\b':
-            case '\f':
-            case '\n':
-            case '\r':
-            case '\t':
-                *dst++ = '\\';
-                *dst++ = *src;
-                break;
+            case '"': *dst++ = '\\'; *dst++ = '"'; break;
+            case '\\': *dst++ = '\\'; *dst++ = '\\'; break;
+            case '\b': *dst++ = '\\'; *dst++ = 'b'; break;
+            case '\f': *dst++ = '\\'; *dst++ = 'f'; break;
+            case '\n': *dst++ = '\\'; *dst++ = 'n'; break;
+            case '\r': *dst++ = '\\'; *dst++ = 'r'; break;
+            case '\t': *dst++ = '\\'; *dst++ = 't'; break;
             default:
-                if (0 >= *src && *src <= 0x1f)
+                if (0 <= *src && *src <= 0x1f)
                     dst += sprintf(dst, "\\u00%02x", *src);
                 else
                     *dst++ = *src;
@@ -156,10 +153,18 @@ static char *json_dump(int count, struct stream_stat *ss)
         }
 
         len += sprintf(buffer + len, " {\"name\":\"%s\"", json_escape(ss[i].name));
-        len += sprintf(buffer + len, "\",\"ifname\":\"%s\"", json_escape(ss[i].ifname));
-        len += sprintf(buffer + len, "\",\"peer\":\"%s\"", json_escape(peer));
+        len += sprintf(buffer + len, ", \"ifname\":\"%s\"", json_escape(ss[i].ifname));
+        len += sprintf(buffer + len, ", \"peer\":\"%s\"", json_escape(peer));
+        len += sprintf(buffer + len, ", \"sample\":\"%s\"", json_escape(ss[i].dtname));
+        len += sprintf(buffer + len, ", \"rate\":%ld", ss[i].sample_rate);
+        len += sprintf(buffer + len, ", \"channels\":%ld", ss[i].channels);
+        len += sprintf(buffer + len, ", \"expected\":%lu", (long unsigned)ss[i].expected);
+        len += sprintf(buffer + len, ", \"lost\":%ld", ss[i].lost);
+        len += sprintf(buffer + len, ", \"ignored\":%s", ss[i].ignore ? "true" : "false");
+        len += sprintf(buffer + len, ", \"synchonized\":%s", ss[i].insync < 3 ? "false" : "true");
+        len += sprintf(buffer + len, ", \"offset\":%lld", (long long)ss[i].offset);
 
-        strcpy(buffer + len, "\"},\n");
+        strcpy(buffer + len, "},\n");
         len += 3;
     }
 
