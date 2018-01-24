@@ -37,9 +37,9 @@
 
 
 static struct stream_stat_cell *stats = NULL;
-static struct stream_stat_cell cell1 = { NULL, 0 };
-static struct stream_stat_cell cell2 = { NULL, 0 };
-static struct stream_stat_cell cell3 = { NULL, 0 };
+static struct stream_stat_cell cell1 = { NULL, 0, 0 };
+static struct stream_stat_cell cell2 = { NULL, 0, 0 };
+static struct stream_stat_cell cell3 = { NULL, 0, 0 };
 
 
 static char err405[] = "HTTP/1.0 405 Method Not Allowed\r\n"
@@ -242,7 +242,7 @@ static void *httpd_accept(void *userdata)
             continue;
         }
 
-        // atomic operation
+        // atomic operation. no need to lock
         cell = stats;
 
         // dump statistic
@@ -250,6 +250,7 @@ static void *httpd_accept(void *userdata)
             json = json_dump(cell->count, cell->ss);
         else
             json = json_dump(0, NULL);
+
         size = sprintf(buffer, ok200, strlen(json));
         write(sock, buffer, size);
         write(sock, json, strlen(json));
@@ -266,7 +267,7 @@ void httpd_update(struct stream *streams)
     struct stream *stream;
     int i, count;
 
-    // no streams connected, no stats
+    // no streams connected
     if (!streams) {
         stats = NULL;
         return;
@@ -281,17 +282,20 @@ void httpd_update(struct stream *streams)
     else
         cell = &cell1;
 
-    // total streams
+    // count streams
     for (count = 0, stream = streams; stream; stream = stream->next)
         count++;
 
-    // check available memory size
-    if (cell->count < count)
-        cell->ss = realloc(cell->ss, count * sizeof(struct stream_stat));
+    // check available memory in cell
+    if (count > cell->ss_size) {
+        void *ss;
 
-    if (cell->ss == NULL) {
-        cell->count = 0;
-        return;
+        ss = realloc(cell->ss, count * sizeof(struct stream_stat));
+        if (ss == NULL)
+            return;
+
+        cell->ss_size = count;
+        cell->ss = ss;
     }
 
     // save streams stat
@@ -309,6 +313,8 @@ void httpd_update(struct stream *streams)
         cell->ss[i].insync      = stream->insync;
         cell->ss[i].offset      = stream->offset;
     }
+
+    cell->count = i;
 
     // update stats pointer
     // this is atomic operation, no need to lock

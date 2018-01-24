@@ -54,6 +54,7 @@ struct stream_stat {
 
 struct stream_stat_cell {
     struct stream_stat *ss;
+    int ss_size;
     int count;
 };
 
