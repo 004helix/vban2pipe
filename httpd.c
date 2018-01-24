@@ -51,6 +51,7 @@ static char err405[] = "HTTP/1.0 405 Method Not Allowed\r\n"
 
 static char ok200[] = "HTTP/1.0 200 OK\r\n"
                       "Server: vban2pipe\r\n"
+                      "Content-Type: application/json\r\n"
                       "Content-Length: %d\r\n"
                       "Connection: close\r\n"
                       "\r\n";
@@ -113,11 +114,11 @@ static char *json_dump(int count, struct stream_stat *ss)
     }
 
     if (count == 0) {
-        sprintf(buffer, "{\"count\":0,\"list\":[]}\n");
+        sprintf(buffer, "{\"count\":0, \"list\":[]}\n");
         return buffer;
     }
 
-    len = sprintf(buffer, "{\"count\":%d,\"list\":[\n", count);
+    len = sprintf(buffer, "{\"count\":%d, \"list\":[\n", count);
 
     for (i = 0; i < count; i++) {
         // reallocate more buffer size if needed
