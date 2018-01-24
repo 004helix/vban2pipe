@@ -153,6 +153,7 @@ static char *json_dump(int count, struct stream_stat *ss)
         }
 
         len += sprintf(buffer + len, " {\"name\":\"%s\"", json_escape(ss[i].name));
+        len += sprintf(buffer + len, ", \"role\":\"%s\"", i ? "backup" : "primary");
         len += sprintf(buffer + len, ", \"ifname\":\"%s\"", json_escape(ss[i].ifname));
         len += sprintf(buffer + len, ", \"peer\":\"%s\"", json_escape(peer));
         len += sprintf(buffer + len, ", \"sample\":\"%s\"", json_escape(ss[i].dtname));
