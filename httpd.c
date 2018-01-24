@@ -20,6 +20,7 @@
  *  USA.
  */
 
+#include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <string.h>
@@ -55,11 +56,26 @@ static char ok200[] = "HTTP/1.0 200 OK\r\n"
                       "\r\n";
 
 
-static int json_escape(char *dst, char *src)
+static char *json_escape(char *src)
 {
-    int n;
+    static size_t buffer_size = 0;
+    static char *buffer = NULL;
+    size_t minlen;
+    char *dst;
 
-    for (n = 0; *src; n++, src++)
+    minlen = 1 + strlen(src) * 6;
+
+    if (buffer_size < minlen) {
+        void *newbuffer = realloc(buffer, minlen);
+
+        if (newbuffer == NULL)
+            return NULL;
+
+        buffer_size = minlen;
+        buffer = newbuffer;
+    }
+
+    for (dst = buffer; *src; src++)
         switch (*src) {
             case '"':
             case '\\':
@@ -70,17 +86,17 @@ static int json_escape(char *dst, char *src)
             case '\t':
                 *dst++ = '\\';
                 *dst++ = *src;
-                n++;
                 break;
             default:
-                if (0 >= *src && *src <= 0x1f) {
+                if (0 >= *src && *src <= 0x1f)
                     dst += sprintf(dst, "\\u00%02x", *src);
-                    n += 5;
-                } else
+                else
                     *dst++ = *src;
         }
 
-    return n;
+    *dst = '\0';
+
+    return buffer;
 }
 
 
@@ -88,6 +104,7 @@ static char *json_dump(int count, struct stream_stat *ss)
 {
     static size_t buffer_size = 0;
     static char *buffer = NULL;
+    char peer[128];
     int len, i;
 
     if (!buffer) {
@@ -98,14 +115,15 @@ static char *json_dump(int count, struct stream_stat *ss)
         buffer_size = 4096;
     }
 
-    len = sprintf(buffer, "{\"count\":%d,\"list\":[", count);
-
-    if (count > 0) {
-        strcat(buffer, "\n");
-        len++;
+    if (count == 0) {
+        sprintf(buffer, "{\"count\":0,\"list\":[]}\n");
+        return buffer;
     }
 
+    len = sprintf(buffer, "{\"count\":%d,\"list\":[\n", count);
+
     for (i = 0; i < count; i++) {
+        // reallocate more buffer size if needed
         if (buffer_size - len < 1024) {
             char *newbuffer = realloc(buffer, buffer_size + 4096);
 
@@ -116,21 +134,36 @@ static char *json_dump(int count, struct stream_stat *ss)
             buffer = newbuffer;
         }
 
-        strcat(buffer + len, "  {\"name\":\"");
-        len += 10;
+        // parse peer address
+        switch (((struct sockaddr *) &ss[i].peer)->sa_family) {
+            case AF_INET: {
+                struct sockaddr_in *in = (void *) &ss[i].peer;
+                inet_ntop(AF_INET, &in->sin_addr, peer, sizeof(peer));
+                sprintf(peer + strlen(peer), ":%d", ntohs(in->sin_port));
+                break;
+            };
+#ifdef AF_INET6
+            case AF_INET6: {
+                struct sockaddr_in6 *in6 = (void *) &ss[i].peer;
+                peer[0] = '[';
+                inet_ntop(AF_INET6, &in6->sin6_addr, peer + 1, sizeof(peer) - 1);
+                sprintf(peer + strlen(peer), "]:%d", ntohs(in6->sin6_port));
+                break;
+            };
+#endif
+            default:
+                strcpy(peer, "<unsupported address family>");
+        }
 
-        len += json_escape(buffer + len, ss[i].name);
+        len += sprintf(buffer + len, " {\"name\":\"%s\"", json_escape(ss[i].name));
+        len += sprintf(buffer + len, "\",\"ifname\":\"%s\"", json_escape(ss[i].ifname));
+        len += sprintf(buffer + len, "\",\"peer\":\"%s\"", json_escape(peer));
 
-        strcat(buffer + len, "\",\"ifname\":\"");
-        len += 12;
-
-        len += json_escape(buffer + len, ss[i].ifname);
-
-        strcat(buffer + len, "\"}\n");
+        strcpy(buffer + len, "\"},\n");
         len += 3;
     }
 
-    strcat(buffer + len, "]}");
+    strcpy(buffer + len - 2, "\n]}\n");
 
     return buffer;
 }
