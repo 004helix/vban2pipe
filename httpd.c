@@ -121,7 +121,7 @@ static char *json_dump(int count, struct stream_stat *ss)
     len = sprintf(buffer, "{\"count\":%d, \"list\":[\n", count);
 
     for (i = 0; i < count; i++) {
-        // reallocate more buffer size if needed
+        // allocate more buffer size if needed
         if (buffer_size - len < 1024) {
             char *newbuffer = realloc(buffer, buffer_size + 4096);
 
@@ -157,7 +157,7 @@ static char *json_dump(int count, struct stream_stat *ss)
         len += sprintf(buffer + len, ", \"role\":\"%s\"", i ? "backup" : "primary");
         len += sprintf(buffer + len, ", \"ifname\":\"%s\"", json_escape(ss[i].ifname));
         len += sprintf(buffer + len, ", \"peer\":\"%s\"", json_escape(peer));
-        len += sprintf(buffer + len, ", \"sample\":\"%s\"", json_escape(ss[i].dtname));
+        len += sprintf(buffer + len, ", \"format\":\"%s\"", json_escape(ss[i].dtname));
         len += sprintf(buffer + len, ", \"rate\":%ld", ss[i].sample_rate);
         len += sprintf(buffer + len, ", \"channels\":%ld", ss[i].channels);
         len += sprintf(buffer + len, ", \"expected\":%lu", (long unsigned)ss[i].expected);
