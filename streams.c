@@ -259,6 +259,8 @@ struct stream *recvvban(int sock)
         size -= VBAN_HEADER_SIZE;
 
         if (stream) {
+            double dt, dv;
+
             // check packet size
             if (size < stream->datasize) {
                 logger(LOG_VRB, "[%s@%s] too short packet received",
@@ -280,8 +282,23 @@ struct stream *recvvban(int sock)
                        stream->name, stream->ifname);
                 continue;
             }
+
+            // update stats and timestamp
+            dt = (ts.tv_sec - stream->ts.tv_sec) * 1000000000.0 +
+                 (ts.tv_nsec - stream->ts.tv_nsec);
+            // exponentially weighted moving variance
+            dv = dt - stream->dt_average;
+            stream->dt_variance = stream->ewma_a2 *
+                                  (stream->dt_variance + stream->ewma_a1 * dv * dv);
+            // exponentially weighted moving average
+            stream->dt_average = stream->ewma_a1 * dt +
+                                 stream->ewma_a2 * stream->dt_average;
+            // stream timestamp
+            stream->ts = ts;
+
         } else {
             char peer[128];
+            double pps;
 
             // parse peer address
             switch (((struct sockaddr *) &addr)->sa_family) {
@@ -332,12 +349,20 @@ struct stream *recvvban(int sock)
             stream->expected = info.seq;
             stream->curr.data = NULL;
             stream->prev.data = NULL;
+            stream->ts = ts;
 
             stream->ignore = 0;
             stream->insync = 0;
             stream->offset = 0;
 
             stream->next = NULL;
+
+            // stats
+            pps = (double) stream->sample_rate / (double) stream->samples;
+            stream->ewma_a1 = 2.0 / (1.0 + 30.0 * pps);
+            stream->ewma_a2 = 1.0 - stream->ewma_a1;
+            stream->dt_average = 1000000000.0 / pps;
+            stream->dt_variance = 0;
 
             logger(LOG_INF, "[%s@%s] stream connected from %s, %s, %ld Hz, %ld channel(s)",
                    stream->name, stream->ifname, peer, stream->dtname,
@@ -351,9 +376,6 @@ struct stream *recvvban(int sock)
                 streams = stream;
             }
         }
-
-        // update timestamp
-        stream->ts = ts;
 
         // save data to stream buffers
         if (stream->expected == info.seq) {

@@ -2,7 +2,7 @@ CC = gcc
 LD = gcc
 CFLAGS = -Wall -Werror
 #CFLAGS = -Wall -g
-LDFLAGS = -lpthread
+LDFLAGS = -lpthread -lm
 
 EXE = vban2pipe
 SRC = $(wildcard *.c)

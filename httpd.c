@@ -31,6 +31,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <time.h>
+#include <math.h>
 
 #include "httpd.h"
 #include "logger.h"
@@ -165,6 +166,8 @@ static char *json_dump(int count, struct stream_stat *ss)
         len += sprintf(buffer + len, ", \"ignored\":%s", ss[i].ignore ? "true" : "false");
         len += sprintf(buffer + len, ", \"synchonized\":%s", ss[i].insync < 3 ? "false" : "true");
         len += sprintf(buffer + len, ", \"offset\":%lld", (long long)ss[i].offset);
+        len += sprintf(buffer + len, ", \"nsaverage\":%.02f", ss[i].dt_average);
+        len += sprintf(buffer + len, ", \"nsstddev\":%.02f", sqrt(ss[i].dt_variance));
 
         strcpy(buffer + len, "},\n");
         len += 3;
@@ -347,8 +350,10 @@ void httpd_update(struct stream *streams)
         cell->ss[i].dtname      = stream->dtname;
         cell->ss[i].sample_rate = stream->sample_rate;
         cell->ss[i].channels    = stream->channels;
-        cell->ss[i].expected    = stream->expected;
         cell->ss[i].lost        = stream->lost;
+        cell->ss[i].expected    = stream->expected;
+        cell->ss[i].dt_average  = stream->dt_average;
+        cell->ss[i].dt_variance = stream->dt_variance;
         cell->ss[i].ignore      = stream->ignore;
         cell->ss[i].insync      = stream->insync;
         cell->ss[i].offset      = stream->offset;

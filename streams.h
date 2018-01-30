@@ -65,6 +65,12 @@ struct stream {
     struct packet prev;     // previous packet in stream
     struct timespec ts;     // last packet received time
 
+    // statistics
+    double ewma_a1;         // exponential moving average coefficients:
+    double ewma_a2;         // 30 seconds average = 2 / (1 + pps * 30)
+    double dt_average;      // average nanoseconds between packets, EWMA
+    double dt_variance;     // average variance between packets, EWMV
+
     // synchronization
     long ignore;            // ignore this stream
     long insync;            // synchronized with primary stream

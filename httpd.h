@@ -43,8 +43,10 @@ struct stream_stat {
     long channels;          // channels
 
     // stream counters
-    uint32_t expected;      // next expected packet number in this stream
     long lost;              // total lost packets counter
+    uint32_t expected;      // next expected packet number in this stream
+    double dt_average;      // average nanoseconds between packets, EWMA
+    double dt_variance;     // average variance between packets, EWMV
 
     // synchronization
     long ignore;            // ignore this stream
