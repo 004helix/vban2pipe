@@ -166,8 +166,8 @@ static char *json_dump(int count, struct stream_stat *ss)
         len += sprintf(buffer + len, ", \"ignored\":%s", ss[i].ignore ? "true" : "false");
         len += sprintf(buffer + len, ", \"synchonized\":%s", ss[i].insync < 3 ? "false" : "true");
         len += sprintf(buffer + len, ", \"offset\":%lld", (long long)ss[i].offset);
-        len += sprintf(buffer + len, ", \"nsaverage\":%.02f", ss[i].dt_average);
-        len += sprintf(buffer + len, ", \"nsstddev\":%.02f", sqrt(ss[i].dt_variance));
+        len += sprintf(buffer + len, ", \"average_us\":%.02f", ss[i].dt_average / 1000.0);
+        len += sprintf(buffer + len, ", \"stddev_us\":%.02f", sqrt(ss[i].dt_variance / 1000.0));
 
         strcpy(buffer + len, "},\n");
         len += 3;
