@@ -229,15 +229,13 @@ struct stream *recvvban(int sock)
         }
 
         if (!found_idx) {
-            logger(LOG_ERR, "[%s@%s] couldn't find IP_PKTINFO data in auxiliary recvmsg() data!",
-                   stream->name, stream->ifname);
+            logger(LOG_ERR, "couldn't find IP_PKTINFO data in auxiliary recvmsg() data!");
             free(buffer);
             return NULL;
         }
 
         if (!found_ts) {
-            logger(LOG_ERR, "[%s@%s] couldn't find SCM_TIMESTAMPNS data in auxiliary recvmsg() data!",
-                   stream->name, stream->ifname);
+            logger(LOG_ERR, "couldn't find SCM_TIMESTAMPNS data in auxiliary recvmsg() data!");
             free(buffer);
             return NULL;
         }
