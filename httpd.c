@@ -367,7 +367,7 @@ void httpd_update(struct stream *streams)
 }
 
 
-int httpd(sock)
+int httpd(int sock)
 {
     pthread_attr_t attr;
     pthread_t thread;

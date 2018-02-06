@@ -218,7 +218,7 @@ struct stream *recvvban(int sock)
         found_idx = 0;
         for (cm = CMSG_FIRSTHDR(&m); cm; cm = CMSG_NXTHDR(&m, cm)) {
             if (cm->cmsg_level == IPPROTO_IP && cm->cmsg_type == IP_PKTINFO) {
-                struct in_pktinfo *ipi = CMSG_DATA(cm);
+                struct in_pktinfo *ipi = (void *) CMSG_DATA(cm);
                 ifindex = ipi->ipi_ifindex;
                 found_idx++;
             }
