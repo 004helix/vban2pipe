@@ -25,7 +25,7 @@
 
 #include <stdint.h>
 
-void output_dump();
+long output_lost();
 void output_init(long cache_size);
 void output_move(int64_t offset);
 void output_play(int fd, int64_t ts, long samples,

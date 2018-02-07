@@ -36,6 +36,7 @@
 #include "httpd.h"
 #include "logger.h"
 #include "streams.h"
+#include "output.h"
 
 
 static struct snapshot_cell *snap = NULL;
@@ -99,7 +100,7 @@ static char *json_escape(char *src)
 }
 
 
-static char *json_dump(int count, struct stream_snap *ss)
+static char *json_dump(struct snapshot_cell *cell)
 {
     static size_t buffer_size = 0;
     static char *buffer = NULL;
@@ -114,14 +115,21 @@ static char *json_dump(int count, struct stream_snap *ss)
         buffer_size = 4096;
     }
 
-    if (count == 0) {
-        sprintf(buffer, "{\"streams\":[]}\n");
+    if (cell == NULL) {
+        sprintf(buffer, "{\"lost\":0, \"streams\":[]}\n");
         return buffer;
     }
 
-    len = sprintf(buffer, "{\"streams\":[\n");
+    if (cell->count == 0) {
+        sprintf(buffer, "{\"lost\":%ld, \"streams\":[]}\n", cell->lost);
+        return buffer;
+    }
 
-    for (i = 0; i < count; i++) {
+    len = sprintf(buffer, "{\"lost\":%ld, \"streams\":[\n", cell->lost);
+
+    for (i = 0; i < cell->count; i++) {
+        struct stream_snap *ss = &cell->ss[i];
+
         // allocate more buffer size if needed
         if (buffer_size - len < 1024) {
             char *newbuffer = realloc(buffer, buffer_size + 4096);
@@ -134,16 +142,16 @@ static char *json_dump(int count, struct stream_snap *ss)
         }
 
         // parse peer address
-        switch (((struct sockaddr *) &ss[i].peer)->sa_family) {
+        switch (((struct sockaddr *) &ss->peer)->sa_family) {
             case AF_INET: {
-                struct sockaddr_in *in = (void *) &ss[i].peer;
+                struct sockaddr_in *in = (void *) &ss->peer;
                 inet_ntop(AF_INET, &in->sin_addr, peer, sizeof(peer));
                 sprintf(peer + strlen(peer), ":%d", ntohs(in->sin_port));
                 break;
             };
 #ifdef AF_INET6
             case AF_INET6: {
-                struct sockaddr_in6 *in6 = (void *) &ss[i].peer;
+                struct sockaddr_in6 *in6 = (void *) &ss->peer;
                 peer[0] = '[';
                 inet_ntop(AF_INET6, &in6->sin6_addr, peer + 1, sizeof(peer) - 1);
                 sprintf(peer + strlen(peer), "]:%d", ntohs(in6->sin6_port));
@@ -154,22 +162,22 @@ static char *json_dump(int count, struct stream_snap *ss)
                 strcpy(peer, "<unsupported address family>");
         }
 
-        len += sprintf(buffer + len, " {\"name\":\"%s\"", json_escape(ss[i].name));
+        len += sprintf(buffer + len, " {\"name\":\"%s\"", json_escape(ss->name));
         len += sprintf(buffer + len, ", \"role\":\"%s\"", i ? "backup" : "primary");
-        len += sprintf(buffer + len, ", \"ifname\":\"%s\"", json_escape(ss[i].ifname));
+        len += sprintf(buffer + len, ", \"ifname\":\"%s\"", json_escape(ss->ifname));
         len += sprintf(buffer + len, ", \"peer\":\"%s\"", json_escape(peer));
-        len += sprintf(buffer + len, ", \"format\":\"%s\"", json_escape(ss[i].dtname));
-        len += sprintf(buffer + len, ", \"rate\":%ld", ss[i].sample_rate);
-        len += sprintf(buffer + len, ", \"channels\":%ld", ss[i].channels);
-        len += sprintf(buffer + len, ", \"expected\":%lu", (long unsigned)ss[i].expected);
-        len += sprintf(buffer + len, ", \"lost\":%ld", ss[i].lost);
-        len += sprintf(buffer + len, ", \"ignored\":%s", ss[i].ignore ? "true" : "false");
-        len += sprintf(buffer + len, ", \"synchonized\":%s", ss[i].insync < 3 ? "false" : "true");
-        len += sprintf(buffer + len, ", \"offset\":%lld", (long long)ss[i].offset);
-        len += sprintf(buffer + len, ", \"average_us\":%.02f", ss[i].dt_average / 1000.0);
-        len += sprintf(buffer + len, ", \"stddev_us\":%.02f", sqrt(ss[i].dt_variance) / 1000.0);
+        len += sprintf(buffer + len, ", \"format\":\"%s\"", json_escape(ss->dtname));
+        len += sprintf(buffer + len, ", \"rate\":%ld", ss->sample_rate);
+        len += sprintf(buffer + len, ", \"channels\":%ld", ss->channels);
+        len += sprintf(buffer + len, ", \"expected\":%lu", (long unsigned)ss->expected);
+        len += sprintf(buffer + len, ", \"lost\":%ld", ss->lost);
+        len += sprintf(buffer + len, ", \"ignored\":%s", ss->ignore ? "true" : "false");
+        len += sprintf(buffer + len, ", \"synchonized\":%s", ss->insync < 3 ? "false" : "true");
+        len += sprintf(buffer + len, ", \"offset\":%lld", (long long)ss->offset);
+        len += sprintf(buffer + len, ", \"average_us\":%.02f", ss->dt_average / 1000.0);
+        len += sprintf(buffer + len, ", \"stddev_us\":%.02f", sqrt(ss->dt_variance) / 1000.0);
         len += sprintf(buffer + len, ", \"uptime\":%ld",
-                       (long) (ss[i].ts_last.tv_sec - ss[i].ts_first.tv_sec));
+                       (long) (ss->ts_last.tv_sec - ss->ts_first.tv_sec));
 
         strcpy(buffer + len, "},\n");
         len += 3;
@@ -291,10 +299,7 @@ static void *httpd_accept(void *userdata)
         cell = snap;
 
         // dump statistic
-        if (cell)
-            json = json_dump(cell->count, cell->ss);
-        else
-            json = json_dump(0, NULL);
+        json = json_dump(cell);
 
         size = sprintf(buffer, ok200, strlen(json));
         write(sock, buffer, size);
@@ -342,6 +347,9 @@ void httpd_update(struct stream *streams)
         cell->ss_size = count;
         cell->ss = ss;
     }
+
+    // save lost samples
+    cell->lost = output_lost();
 
     // save streams stat
     for (i = 0, stream = streams; stream; i++, stream = stream->next) {

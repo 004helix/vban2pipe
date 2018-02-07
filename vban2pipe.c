@@ -83,26 +83,6 @@ static void runhook(char *prog)
 }
 
 
-static void dump(int signo)
-{
-    struct stream *stream;
-
-    logger(LOG_INF, "--- dump ---");
-
-    for (stream = streams; stream; stream = stream->next) {
-        char *role = stream == streams ? "primary" : "backup";
-        char *insync = stream->insync < 3 ? "no" : "yes";
-        logger(LOG_INF, "[%s@%s] expected: %lu, insync: %s, lost: %ld, offset: %lld, %s",
-               stream->name, stream->ifname, (long unsigned) stream->expected, insync,
-               stream->lost, (long long unsigned) stream->offset, role);
-    }
-
-    output_dump();
-
-    logger(LOG_INF, "------------");
-}
-
-
 int syncstreams(struct stream *stream1, struct stream *stream2, int64_t *offset)
 {
     int i, w, matches;
@@ -286,7 +266,6 @@ int main(int argc, char **argv)
 
     signal(SIGPIPE, SIG_IGN);
     signal(SIGCHLD, SIG_IGN);
-    signal(SIGUSR1, dump);
 
     // check command line arguments
     if (argc < 3) {

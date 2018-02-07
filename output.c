@@ -51,12 +51,9 @@ static void report_lost(long lost)
 }
 
 
-void output_dump(void)
+long output_lost(void)
 {
-    if (lost_total == 1)
-        logger(LOG_INF, "<out> total lost 1 sample");
-    else
-        logger(LOG_INF, "<out> total lost %ld samples", lost_total);
+    return lost_total;
 }
 
 
@@ -142,7 +139,7 @@ void output_play(int fd, int64_t ts, long samples,
 
             if (write(fd, buffer, i * ss) < 0) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    // report override can be very noisy if source suspended
+                    // report overrun can be very noisy if source suspended
                     logger(LOG_DBG, "output overrun: %ld samples", i);
                 } else {
                     logger(LOG_ERR, "write failed: %s", strerror(errno));

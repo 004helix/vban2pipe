@@ -61,6 +61,7 @@ struct snapshot_cell {
     struct stream_snap *ss;
     int ss_size;
     int count;
+    long lost;
 };
 
 void httpd_update(struct stream *streams);
