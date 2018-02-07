@@ -103,7 +103,6 @@ static char *json_dump(int count, struct stream_snap *ss)
 {
     static size_t buffer_size = 0;
     static char *buffer = NULL;
-    long long uptime;
     char peer[128];
     int len, i;
 
@@ -116,11 +115,11 @@ static char *json_dump(int count, struct stream_snap *ss)
     }
 
     if (count == 0) {
-        sprintf(buffer, "{\"count\":0, \"list\":[]}\n");
+        sprintf(buffer, "{\"streams\":[]}\n");
         return buffer;
     }
 
-    len = sprintf(buffer, "{\"count\":%d, \"list\":[\n", count);
+    len = sprintf(buffer, "{\"streams\":[\n");
 
     for (i = 0; i < count; i++) {
         // allocate more buffer size if needed
@@ -155,9 +154,6 @@ static char *json_dump(int count, struct stream_snap *ss)
                 strcpy(peer, "<unsupported address family>");
         }
 
-        uptime = (long long) (ss[i].ts_last.tv_sec - ss[i].ts_first.tv_sec) * 1000LL;
-        uptime += (long long) (ss[i].ts_last.tv_nsec - ss[i].ts_first.tv_nsec) / 1000000LL;
-
         len += sprintf(buffer + len, " {\"name\":\"%s\"", json_escape(ss[i].name));
         len += sprintf(buffer + len, ", \"role\":\"%s\"", i ? "backup" : "primary");
         len += sprintf(buffer + len, ", \"ifname\":\"%s\"", json_escape(ss[i].ifname));
@@ -172,7 +168,8 @@ static char *json_dump(int count, struct stream_snap *ss)
         len += sprintf(buffer + len, ", \"offset\":%lld", (long long)ss[i].offset);
         len += sprintf(buffer + len, ", \"average_us\":%.02f", ss[i].dt_average / 1000.0);
         len += sprintf(buffer + len, ", \"stddev_us\":%.02f", sqrt(ss[i].dt_variance) / 1000.0);
-        len += sprintf(buffer + len, ", \"uptime_ms\":%lld", uptime);
+        len += sprintf(buffer + len, ", \"uptime\":%ld",
+                       (long) (ss[i].ts_last.tv_sec - ss[i].ts_first.tv_sec));
 
         strcpy(buffer + len, "},\n");
         len += 3;
