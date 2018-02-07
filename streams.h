@@ -50,31 +50,32 @@ struct stream {
     char name[20];
 
     // data format
-    long samples;           // samples per packet
-    long sample_size;       // sample size in bytes
-    long sample_rate;       // sample rate
-    long channels;          // channels
-    long datasize;          // total bytes in one packet
-    long datatype;          // stream format (VBAN)
-    char *dtname;           // sample format name
+    long samples;              // samples per packet
+    long sample_size;          // sample size in bytes
+    long sample_rate;          // sample rate
+    long channels;             // channels
+    long datasize;             // total bytes in one packet
+    long datatype;             // stream format (VBAN)
+    char *dtname;              // sample format name
 
     // stream counters
-    long lost;              // total lost packets counter
-    uint32_t expected;      // next expected packet number in this stream
-    struct packet curr;     // current packet in stream
-    struct packet prev;     // previous packet in stream
-    struct timespec ts;     // last packet received time
+    long lost;                 // total lost packets counter
+    uint32_t expected;         // next expected packet number in this stream
+    struct packet curr;        // current packet in stream
+    struct packet prev;        // previous packet in stream
+    struct timespec ts_first;  // first packet received time
+    struct timespec ts_last;   // last packet received time
 
     // statistics
-    double ewma_a1;         // exponential moving average coefficients:
-    double ewma_a2;         // 30 seconds average = 2 / (1 + pps * 30)
-    double dt_average;      // average nanoseconds between packets, EWMA
-    double dt_variance;     // average variance between packets, EWMV
+    double ewma_a1;            // exponential moving average coefficients:
+    double ewma_a2;            // 30 seconds average = 2 / (1 + pps * 30)
+    double dt_average;         // average nanoseconds between packets, EWMA
+    double dt_variance;        // average variance between packets, EWMV
 
     // synchronization
-    long ignore;            // ignore this stream
-    long insync;            // synchronized with primary stream
-    int64_t offset;         // stream offset
+    long ignore;               // ignore this stream
+    long insync;               // synchronized with primary stream
+    int64_t offset;            // stream offset
 
     // next stream
     struct stream *next;

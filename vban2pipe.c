@@ -156,8 +156,8 @@ void run(int sock, int pipefd)
             return;
 
         // save streams stat every second
-        if (stream->ts.tv_sec != stat_sec) {
-            stat_sec = stream->ts.tv_sec;
+        if (stream->ts_last.tv_sec != stat_sec) {
+            stat_sec = stream->ts_last.tv_sec;
             httpd_update(streams);
         }
 
@@ -169,8 +169,8 @@ void run(int sock, int pipefd)
             if (dead == stream)
                 continue;
 
-            msec = (long) (stream->ts.tv_sec - dead->ts.tv_sec) * 1000L;
-            msec += (long) (stream->ts.tv_nsec - dead->ts.tv_nsec) / 1000000L;
+            msec = (long) (stream->ts_last.tv_sec - dead->ts_last.tv_sec) * 1000L;
+            msec += (long) (stream->ts_last.tv_nsec - dead->ts_last.tv_nsec) / 1000000L;
 
             if (msec < STREAM_TIMEOUT_MSEC)
                 continue;

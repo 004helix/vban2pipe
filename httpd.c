@@ -38,10 +38,10 @@
 #include "streams.h"
 
 
-static struct stream_stat_cell *stats = NULL;
-static struct stream_stat_cell cell1 = { NULL, 0, 0 };
-static struct stream_stat_cell cell2 = { NULL, 0, 0 };
-static struct stream_stat_cell cell3 = { NULL, 0, 0 };
+static struct snapshot_cell *snap = NULL;
+static struct snapshot_cell cell1 = { NULL, 0, 0 };
+static struct snapshot_cell cell2 = { NULL, 0, 0 };
+static struct snapshot_cell cell3 = { NULL, 0, 0 };
 
 
 static char err405[] = "HTTP/1.0 405 Method Not Allowed\r\n"
@@ -99,10 +99,11 @@ static char *json_escape(char *src)
 }
 
 
-static char *json_dump(int count, struct stream_stat *ss)
+static char *json_dump(int count, struct stream_snap *ss)
 {
     static size_t buffer_size = 0;
     static char *buffer = NULL;
+    long long uptime;
     char peer[128];
     int len, i;
 
@@ -154,6 +155,9 @@ static char *json_dump(int count, struct stream_stat *ss)
                 strcpy(peer, "<unsupported address family>");
         }
 
+        uptime = (long long) (ss[i].ts_last.tv_sec - ss[i].ts_first.tv_sec) * 1000LL;
+        uptime += (long long) (ss[i].ts_last.tv_nsec - ss[i].ts_first.tv_nsec) / 1000000LL;
+
         len += sprintf(buffer + len, " {\"name\":\"%s\"", json_escape(ss[i].name));
         len += sprintf(buffer + len, ", \"role\":\"%s\"", i ? "backup" : "primary");
         len += sprintf(buffer + len, ", \"ifname\":\"%s\"", json_escape(ss[i].ifname));
@@ -168,6 +172,7 @@ static char *json_dump(int count, struct stream_stat *ss)
         len += sprintf(buffer + len, ", \"offset\":%lld", (long long)ss[i].offset);
         len += sprintf(buffer + len, ", \"average_us\":%.02f", ss[i].dt_average / 1000.0);
         len += sprintf(buffer + len, ", \"stddev_us\":%.02f", sqrt(ss[i].dt_variance) / 1000.0);
+        len += sprintf(buffer + len, ", \"uptime_ms\":%lld", uptime);
 
         strcpy(buffer + len, "},\n");
         len += 3;
@@ -182,7 +187,7 @@ static char *json_dump(int count, struct stream_stat *ss)
 static void *httpd_accept(void *userdata)
 {
     int sock, lsock = *((int *) userdata);
-    struct stream_stat_cell *cell;
+    struct snapshot_cell *cell;
     struct sockaddr_storage addr;
     struct timeval timeout;
     struct timespec ts;
@@ -286,7 +291,7 @@ static void *httpd_accept(void *userdata)
         }
 
         // atomic operation. no need to lock
-        cell = stats;
+        cell = snap;
 
         // dump statistic
         if (cell)
@@ -306,21 +311,21 @@ static void *httpd_accept(void *userdata)
 
 void httpd_update(struct stream *streams)
 {
-    struct stream_stat_cell *cell;
+    struct snapshot_cell *cell;
     struct stream *stream;
     int i, count;
 
     // no streams connected
     if (!streams) {
-        stats = NULL;
+        snap = NULL;
         return;
     }
 
     // select cell to save
-    if (stats == &cell1)
+    if (snap == &cell1)
         cell = &cell2;
     else
-    if (stats == &cell2)
+    if (snap == &cell2)
         cell = &cell3;
     else
         cell = &cell1;
@@ -333,7 +338,7 @@ void httpd_update(struct stream *streams)
     if (count > cell->ss_size) {
         void *ss;
 
-        ss = realloc(cell->ss, count * sizeof(struct stream_stat));
+        ss = realloc(cell->ss, count * sizeof(struct stream_snap));
         if (ss == NULL)
             return;
 
@@ -352,6 +357,8 @@ void httpd_update(struct stream *streams)
         cell->ss[i].channels    = stream->channels;
         cell->ss[i].lost        = stream->lost;
         cell->ss[i].expected    = stream->expected;
+        cell->ss[i].ts_first    = stream->ts_first;
+        cell->ss[i].ts_last     = stream->ts_last;
         cell->ss[i].dt_average  = stream->dt_average;
         cell->ss[i].dt_variance = stream->dt_variance;
         cell->ss[i].ignore      = stream->ignore;
@@ -361,9 +368,9 @@ void httpd_update(struct stream *streams)
 
     cell->count = i;
 
-    // update stats pointer
+    // update snapshot pointer
     // this is atomic operation, no need to lock
-    stats = cell;
+    snap = cell;
 }
 
 

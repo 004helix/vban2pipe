@@ -27,7 +27,8 @@
 #include <net/if.h>
 #include "streams.h"
 
-struct stream_stat {
+// stream snapshot
+struct stream_snap {
     // remote address
     struct sockaddr_storage peer;
 
@@ -38,24 +39,26 @@ struct stream_stat {
     char name[20];
 
     // data format
-    char *dtname;           // sample format name
-    long sample_rate;       // sample rate
-    long channels;          // channels
+    char *dtname;              // sample format name
+    long sample_rate;          // sample rate
+    long channels;             // channels
 
     // stream counters
-    long lost;              // total lost packets counter
-    uint32_t expected;      // next expected packet number in this stream
-    double dt_average;      // average nanoseconds between packets, EWMA
-    double dt_variance;     // average variance between packets, EWMV
+    long lost;                 // total lost packets counter
+    uint32_t expected;         // next expected packet number in this stream
+    struct timespec ts_first;  // first packet received time
+    struct timespec ts_last;   // last packet received time
+    double dt_average;         // average nanoseconds between packets, EWMA
+    double dt_variance;        // average variance between packets, EWMV
 
     // synchronization
-    long ignore;            // ignore this stream
-    long insync;            // synchronized with primary stream
-    int64_t offset;         // stream offset
+    long ignore;               // ignore this stream
+    long insync;               // synchronized with primary stream
+    int64_t offset;            // stream offset
 };
 
-struct stream_stat_cell {
-    struct stream_stat *ss;
+struct snapshot_cell {
+    struct stream_snap *ss;
     int ss_size;
     int count;
 };

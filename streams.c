@@ -284,8 +284,8 @@ struct stream *recvvban(int sock)
             }
 
             // update stats and timestamp
-            dt = (ts.tv_sec - stream->ts.tv_sec) * 1000000000.0 +
-                 (ts.tv_nsec - stream->ts.tv_nsec);
+            dt = (ts.tv_sec - stream->ts_last.tv_sec) * 1000000000.0 +
+                 (ts.tv_nsec - stream->ts_last.tv_nsec);
             // exponentially weighted moving variance
             dv = dt - stream->dt_average;
             stream->dt_variance = stream->ewma_a2 *
@@ -294,7 +294,7 @@ struct stream *recvvban(int sock)
             stream->dt_average = stream->ewma_a1 * dt +
                                  stream->ewma_a2 * stream->dt_average;
             // stream timestamp
-            stream->ts = ts;
+            stream->ts_last = ts;
 
         } else {
             char peer[128];
@@ -349,7 +349,8 @@ struct stream *recvvban(int sock)
             stream->expected = info.seq;
             stream->curr.data = NULL;
             stream->prev.data = NULL;
-            stream->ts = ts;
+            stream->ts_first = ts;
+            stream->ts_last = ts;
 
             stream->ignore = 0;
             stream->insync = 0;
