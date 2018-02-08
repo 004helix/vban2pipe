@@ -100,10 +100,11 @@ static char *json_escape(char *src)
 }
 
 
-static char *json_dump(struct snapshot_cell *cell)
+static char *json_dump(void)
 {
     static size_t buffer_size = 0;
     static char *buffer = NULL;
+    struct snapshot_cell *cell;
     char peer[128];
     int len, i;
 
@@ -114,6 +115,9 @@ static char *json_dump(struct snapshot_cell *cell)
 
         buffer_size = 4096;
     }
+
+    // atomic operation. no need to lock
+    cell = snap;
 
     if (cell == NULL) {
         sprintf(buffer, "{\"lost\":0, \"streams\":[]}\n");
@@ -192,7 +196,6 @@ static char *json_dump(struct snapshot_cell *cell)
 static void *httpd_accept(void *userdata)
 {
     int sock, lsock = *((int *) userdata);
-    struct snapshot_cell *cell;
     struct sockaddr_storage addr;
     struct timeval timeout;
     struct timespec ts;
@@ -295,11 +298,8 @@ static void *httpd_accept(void *userdata)
             continue;
         }
 
-        // atomic operation. no need to lock
-        cell = snap;
-
         // dump statistic
-        json = json_dump(cell);
+        json = json_dump();
 
         size = sprintf(buffer, ok200, strlen(json));
         write(sock, buffer, size);
