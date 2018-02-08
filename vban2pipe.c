@@ -49,16 +49,17 @@
 
 
 /*
- * on connect/disconnect hooks
+ * global vars
  */
 
+static char *pipename = NULL;
 static char *onconnect = NULL;
 static char *ondisconnect = NULL;
 
 
-static void error(char *msg)
+static void error(char *msg, int err)
 {
-    logger(LOG_ERR, "%s: %s", msg, strerror(errno));
+    logger(LOG_ERR, "%s: %s", msg, strerror(err));
     exit(1);
 }
 
@@ -83,7 +84,7 @@ static void runhook(char *prog)
 }
 
 
-int syncstreams(struct stream *stream1, struct stream *stream2, int64_t *offset)
+static int syncstreams(struct stream *stream1, struct stream *stream2, int64_t *offset)
 {
     int i, w, matches;
     long size = stream2->datasize;
@@ -124,7 +125,7 @@ int syncstreams(struct stream *stream1, struct stream *stream2, int64_t *offset)
 }
 
 
-void run(int sock, int pipefd)
+static void run(int sock)
 {
     struct stream *stream, *dead;
     time_t stat_sec = 0;
@@ -135,7 +136,7 @@ void run(int sock, int pipefd)
         if (!stream)
             return;
 
-        // save streams stat every second
+        // snapshot streams every second
         if (stream->ts_last.tv_sec != stat_sec) {
             stat_sec = stream->ts_last.tv_sec;
             httpd_update(streams);
@@ -195,7 +196,9 @@ void run(int sock, int pipefd)
                 logger(LOG_INF, "[%s@%s] stream online, primary",
                        stream->name, stream->ifname);
 
-                output_init(stream->samples * BUFFER_OUT_PACKETS);
+                if (output_init(pipename, stream->samples * BUFFER_OUT_PACKETS) < 0)
+                    error("pipe open", errno);
+
                 if (onconnect)
                     runhook(onconnect);
 
@@ -238,16 +241,14 @@ void run(int sock, int pipefd)
             continue;
         }
 
-        if (stream->prev.data && stream->prev.sent == 0) {
-            output_play(pipefd,
-                        (stream->expected - 1) * stream->samples - stream->offset,
+        if (stream->prev.data && !stream->prev.sent) {
+            output_play(stream->samples * (stream->expected - 1) - stream->offset,
                         stream->samples, stream->prev.data, stream->datasize);
             stream->prev.sent++;
         }
 
-        if (stream->curr.sent == 0) {
-            output_play(pipefd,
-                        stream->expected * stream->samples - stream->offset,
+        if (!stream->curr.sent) {
+            output_play(stream->samples * stream->expected - stream->offset,
                         stream->samples, stream->curr.data, stream->datasize);
             stream->curr.sent++;
         }
@@ -257,10 +258,10 @@ void run(int sock, int pipefd)
 
 int main(int argc, char **argv)
 {
-    int port, pipefd, optval;
     struct sockaddr_in addr;
     struct timeval timeout;
     int vbsock, httpdsock;
+    int port, optval;
 
     logger_init();
 
@@ -280,23 +281,26 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // setup connect/disconnect handlers
-    if (argc > 3)
-        onconnect = strdup(argv[3]);
+    // setup pipename, connect/disconnect handlers
+    if (!(pipename = strdup(argv[2])))
+        error("strdup", ENOMEM);
 
-    if (argc > 4)
-        ondisconnect = strdup(argv[4]);
+    if (argc > 3 && !(onconnect = strdup(argv[3])))
+        error("strdup", ENOMEM);
+
+    if (argc > 4 && !(ondisconnect = strdup(argv[4])))
+        error("strdup", ENOMEM);
 
     // create UDP (vban) listen socket
     vbsock = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
     if (vbsock < 0)
-        error("socket");
+        error("socket", errno);
 
     // set SO_REUSEADDR
     optval = 1;
     if (setsockopt(vbsock, SOL_SOCKET, SO_REUSEADDR,
                    (const void *)&optval, sizeof(optval)) < 0)
-        error("setsockopt failed");
+        error("setsockopt failed", errno);
 
     // address to listen on
     bzero((char *) &addr, sizeof(addr));
@@ -306,37 +310,37 @@ int main(int argc, char **argv)
 
     // bind
     if (bind(vbsock, (struct sockaddr *)&addr, sizeof(addr)) < 0)
-        error("bind");
+        error("bind", errno);
 
     // set receive timeout
     timeout.tv_sec = STREAM_TIMEOUT_MSEC / 1000000;
     timeout.tv_usec = (STREAM_TIMEOUT_MSEC % 100000) * 1000;
     if (setsockopt(vbsock, SOL_SOCKET, SO_RCVTIMEO, &timeout,
                    sizeof(timeout)) < 0)
-        error("setsockopt failed");
+        error("setsockopt failed", errno);
 
     // set SO_TIMESTAMPNS
     optval = 1;
     if (setsockopt(vbsock, SOL_SOCKET, SO_TIMESTAMPNS, &optval,
                    sizeof(optval)) < 0)
-        error("setsockopt failed");
+        error("setsockopt failed", errno);
 
     // set IP_PKTINFO
     optval = 1;
     if (setsockopt(vbsock, IPPROTO_IP, IP_PKTINFO, &optval,
                    sizeof(optval)) < 0)
-        error("setsockopt failed");
+        error("setsockopt failed", errno);
 
     // create TCP (httpd) listen socket
     httpdsock = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
     if (httpdsock < 0)
-        error("socket");
+        error("socket", errno);
 
     // set SO_REUSEADDR
     optval = 1;
     if (setsockopt(httpdsock, SOL_SOCKET, SO_REUSEADDR,
                    (const void *)&optval, sizeof(optval)) < 0)
-        error("setsockopt failed");
+        error("setsockopt failed", errno);
 
     // address to listen on
     bzero((char *) &addr, sizeof(addr));
@@ -346,28 +350,26 @@ int main(int argc, char **argv)
 
     // bind
     if (bind(httpdsock, (struct sockaddr *)&addr, sizeof(addr)) < 0)
-        error("bind");
+        error("bind", errno);
 
     // listen
     if (listen(httpdsock, 63) < 0)
-        error("listen");
-
-    // open pipe
-    pipefd = open(argv[2], O_WRONLY | O_NONBLOCK | O_CLOEXEC);
-    if (pipefd < 0)
-        error("pipe open");
+        error("listen", errno);
 
     // start httpd server
     if (httpd(httpdsock) < 0)
-        error("httpd start");
+        error("httpd start", errno);
 
     // vban receive loop
     while (1) {
-        run(vbsock, pipefd);
+        run(vbsock);
 
         // disconnect all streams
         if (streams) {
             forgetstreams();
+
+            if (output_done() < 0)
+                error("pipe close", errno);
 
             if (ondisconnect)
                 runhook(ondisconnect);

@@ -21,7 +21,9 @@
  */
 
 
-#include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
@@ -34,10 +36,11 @@
 
 
 static int64_t outpos;
-static long cache = 512; // samples
 static char *presence = NULL;
 static char *buffer = NULL;
-static long lost_total;
+static long lost_total = 0;
+static long cache; // samples
+static int fd;
 
 
 static void report_lost(long lost)
@@ -51,14 +54,22 @@ static void report_lost(long lost)
 }
 
 
-long output_lost(void)
+int output_init(char *pipename, long cache_size)
 {
-    return lost_total;
+    if ((fd = open(pipename, O_WRONLY | O_NONBLOCK | O_CLOEXEC)) < 0)
+        return -1;
+
+    cache = cache_size;
+
+    return 0;
 }
 
 
-void output_init(long cache_size)
+int output_done(void)
 {
+    if (close(fd))
+        return -1;
+
     if (buffer)
         free(buffer);
 
@@ -68,18 +79,12 @@ void output_init(long cache_size)
     buffer = NULL;
     presence = NULL;
     lost_total = 0;
-    cache = cache_size;
+
+    return 0;
 }
 
 
-void output_move(int64_t offset)
-{
-    outpos += offset;
-}
-
-
-void output_play(int fd, int64_t ts, long samples,
-                 const char *data, long size)
+void output_play(int64_t ts, long samples, const char *data, long size)
 {
     long ss = size / samples;
     long lost, off, len, i;
@@ -179,4 +184,16 @@ void output_play(int fd, int64_t ts, long samples,
     off = (long) (ts - outpos);
     memcpy(buffer + off * ss, data, size);
     memset(presence + off, 1, samples);
+}
+
+
+void output_move(int64_t offset)
+{
+    outpos += offset;
+}
+
+
+long output_lost(void)
+{
+    return lost_total;
 }

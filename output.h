@@ -25,10 +25,12 @@
 
 #include <stdint.h>
 
-long output_lost();
-void output_init(long cache_size);
+int output_init(char *pipename, long cache_size);
+int output_done(void);
+
+void output_play(int64_t ts, long samples, const char *data, long size);
 void output_move(int64_t offset);
-void output_play(int fd, int64_t ts, long samples,
-                 const char *data, long size);
+
+long output_lost();
 
 #endif
