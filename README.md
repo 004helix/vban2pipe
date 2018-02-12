@@ -63,7 +63,10 @@ Output latency is only 2 packets in stream.
 
 The pipe name parsed each time the first stream is connected.
 The following placeholders in pipe name can be used:
-- %% replaces with single character '%'
-- %f replaces with sample format, i.e. s16le, s24le, etc
-- %r replaces with sample rate, i.e. 44100, 48000, 96000, etc
-- %c replaces with channels number
+
+| Character | Replacement                                |
+| --------- | ------------------------------------------ |
+| `%%`      | single character `%`                       |
+| `%f`      | sample format, i.e. s16le, s24le, etc      |
+| `%r`      | sample rate, i.e. 44100, 48000, 96000, etc |
+| `%c`      | channels number                            |
