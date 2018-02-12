@@ -35,7 +35,7 @@ struct vbaninfo {
     long channels;     // Channels count
     long codec;        // Audio codec
     long datatype;     // Sample format
-    char *dtname;      // Sample format name
+    char *format;      // Sample format name
     char name[20];     // Stream name
 };
 

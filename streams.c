@@ -343,7 +343,7 @@ struct stream *recvvban(int sock)
             stream->channels = info.channels;
             stream->datasize = size;
             stream->datatype = info.datatype;
-            stream->dtname = info.dtname;
+            stream->format = info.format;
 
             stream->lost = 0;
             stream->expected = info.seq;
@@ -366,7 +366,7 @@ struct stream *recvvban(int sock)
             stream->dt_variance = 0;
 
             logger(LOG_INF, "[%s@%s] stream connected from %s, %s, %ld Hz, %ld channel(s)",
-                   stream->name, stream->ifname, peer, stream->dtname,
+                   stream->name, stream->ifname, peer, stream->format,
                    stream->sample_rate, stream->channels);
 
             if (streams) {

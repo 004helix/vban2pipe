@@ -60,10 +60,10 @@ $ vban2pipe 6980 /tmp/vban.input
 ```
 
 Output latency is only 2 packets in stream.
-It is minimal latency by design, but you can
-increase it in vban2pipe.c:
-```
-#define STREAM_TIMEOUT_MSEC 700
-#define BUFFER_OUT_PACKETS 2    <-- HERE
 
-```
+The pipe name parsed each time the first stream is connected.
+The following placeholders in pipe name can be used:
+- %% replaces with single character '%'
+- %f replaces with sample format, i.e. s16le, s24le, etc
+- %r replaces with sample rate, i.e. 44100, 48000, 96000, etc
+- %c replaces with channels number

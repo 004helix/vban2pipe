@@ -75,7 +75,7 @@ int vban_parse(const void *buffer, ssize_t size, struct vbaninfo *info)
     info->seq = le32toh(info->seq);
 
     info->sample_size = vban_dtlist[info->datatype].bps;
-    info->dtname = vban_dtlist[info->datatype].name;
+    info->format = vban_dtlist[info->datatype].name;
 
     if (size - VBAN_HEADER_SIZE !=
         info->samples * info->sample_size * info->channels)

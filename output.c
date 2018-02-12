@@ -24,15 +24,18 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 #include <unistd.h>
 #include <assert.h>
+#include <limits.h>
 #include <errno.h>
 
 #include "output.h"
 #include "logger.h"
+#include "streams.h"
 
 
 static int64_t outpos;
@@ -54,12 +57,46 @@ static void report_lost(long lost)
 }
 
 
-int output_init(char *pipename, long cache_size)
+int output_init(char *pipename, struct stream *stream)
 {
-    if ((fd = open(pipename, O_WRONLY | O_NONBLOCK | O_CLOEXEC)) < 0)
+    char filename[PATH_MAX];
+    char *s = pipename;
+    char *d = filename;
+    size_t l;
+
+    for (; *s && d - filename < PATH_MAX - 1; s++) {
+        switch (*s) {
+            case '%':
+                l = filename + PATH_MAX - d;
+                switch (*(++s)) {
+                    case '%':
+                        *(d++) = *s;
+                        break;
+                    case 'f':
+                        d += snprintf(d, l, "%s", stream->format);
+                        break;
+                    case 'r':
+                        d += snprintf(d, l, "%ld", stream->sample_rate);
+                        break;
+                    case 'c':
+                        d += snprintf(d, l, "%ld", stream->channels);
+                        break;
+                    default:
+                        *(d++) = '%';
+                        s--;
+                }
+                break;
+            default:
+                *(d++) = *s;
+        }
+    }
+
+    *d = '\0';
+
+    if ((fd = open(filename, O_WRONLY | O_NONBLOCK | O_CLOEXEC)) < 0)
         return -1;
 
-    cache = cache_size;
+    cache = stream->samples * BUFFER_OUT_PACKETS;
 
     return 0;
 }

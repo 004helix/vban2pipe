@@ -56,7 +56,7 @@ struct stream {
     long channels;             // channels
     long datasize;             // total bytes in one packet
     long datatype;             // stream format (VBAN)
-    char *dtname;              // sample format name
+    char *format;              // sample format name
 
     // stream counters
     long lost;                 // total lost packets counter

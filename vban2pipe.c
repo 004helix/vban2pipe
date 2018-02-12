@@ -196,7 +196,7 @@ static void run(int sock)
                 logger(LOG_INF, "[%s@%s] stream online, primary",
                        stream->name, stream->ifname);
 
-                if (output_init(pipename, stream->samples * BUFFER_OUT_PACKETS) < 0)
+                if (output_init(pipename, stream) < 0)
                     error("pipe open", errno);
 
                 if (onconnect)

@@ -24,8 +24,11 @@
 #define _OUTPUT_H 1
 
 #include <stdint.h>
+#include "streams.h"
 
-int output_init(char *pipename, long cache_size);
+#define BUFFER_OUT_PACKETS 2
+
+int output_init(char *pipename, struct stream *stream);
 int output_done(void);
 
 void output_play(int64_t ts, long samples, const char *data, long size);

@@ -39,7 +39,7 @@ struct stream_snap {
     char name[20];
 
     // data format
-    char *dtname;              // sample format name
+    char *format;              // sample format name
     long sample_rate;          // sample rate
     long channels;             // channels
 
