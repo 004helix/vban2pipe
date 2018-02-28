@@ -43,7 +43,11 @@ static char *presence = NULL;
 static char *buffer = NULL;
 static long lost_total = 0;
 static long cache; // frames
-static int fd;
+
+static long silent_frames;
+static long silent_frames_max;
+static char filename[PATH_MAX];
+static int fd = -1;
 
 
 static void report_lost(long lost)
@@ -57,13 +61,25 @@ static void report_lost(long lost)
 }
 
 
-int output_init(char *pipename, struct stream *stream)
+static int silent(const char *data, long frames, long frame_size)
 {
-    char filename[PATH_MAX];
+    long size, i;
+
+    for (i = 0, size = frames * frame_size; i < size; i++)
+        if (data[i] != 0)
+            return 0;
+
+    return 1;
+}
+
+
+int output_init(char *pipename, struct stream *stream, long silent_secs)
+{
     char *s = pipename;
     char *d = filename;
     size_t l;
 
+    // create filename
     for (; *s && d - filename < PATH_MAX - 1; s++) {
         switch (*s) {
             case '%':
@@ -93,10 +109,13 @@ int output_init(char *pipename, struct stream *stream)
 
     *d = '\0';
 
-    if ((fd = open(filename, O_WRONLY | O_NONBLOCK | O_CLOEXEC)) < 0)
-        return -1;
-
+    // cache size
     cache = stream->frames * BUFFER_OUT_PACKETS;
+
+    // N seconds of silent frames to close the pipe
+    silent_frames_max = silent_secs * stream->sample_rate;
+    silent_frames = 0;
+    fd = -1;
 
     return 0;
 }
@@ -104,7 +123,7 @@ int output_init(char *pipename, struct stream *stream)
 
 int output_done(void)
 {
-    if (close(fd))
+    if (fd >= 0 && close(fd))
         return -1;
 
     if (buffer)
@@ -180,13 +199,37 @@ void output_play(int64_t ts, const char *data, long frames, long frame_size)
             // calc length of block to play
             for (i = 1; i < len && i < cache && presence[i]; i++);
 
-            if (write(fd, buffer, i * frame_size) < 0) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    // report overrun can be very noisy if source suspended
-                    logger(LOG_DBG, "output overrun: %ld frames", i);
-                } else {
-                    logger(LOG_ERR, "write failed: %s", strerror(errno));
-                    exit(1);
+            if (silent_frames_max > 0 && silent(buffer, i, frame_size)) {
+                if (silent_frames < silent_frames_max)
+                    silent_frames += i;
+            } else
+                silent_frames = 0;
+
+            if (silent_frames > silent_frames_max) {
+                if (fd >= 0) {
+                    close(fd);
+                    fd = -1;
+
+                    logger(LOG_INF, "<out> silence detected: %ld frames, pipe closed", silent_frames);
+                }
+            } else {
+                if (fd == -1) {
+                    if ((fd = open(filename, O_WRONLY | O_NONBLOCK | O_CLOEXEC)) < 0) {
+                        logger(LOG_ERR, "open failed: %s", strerror(errno));
+                        exit(1);
+                    }
+
+                    logger(LOG_INF, "<out> end of silence, pipe opened: %s", filename);
+                }
+
+                if (write(fd, buffer, i * frame_size) < 0) {
+                    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                        // report overrun can be very noisy if source suspended
+                        logger(LOG_DBG, "output overrun: %ld frames", i);
+                    } else {
+                        logger(LOG_ERR, "write failed: %s", strerror(errno));
+                        exit(1);
+                    }
                 }
             }
 

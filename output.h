@@ -28,7 +28,7 @@
 
 #define BUFFER_OUT_PACKETS 2
 
-int output_init(char *pipename, struct stream *stream);
+int output_init(char *pipename, struct stream *stream, long silent_secs);
 int output_done(void);
 
 void output_play(int64_t ts, const char *data, long frames, long frame_size);
