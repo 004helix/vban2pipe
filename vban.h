@@ -27,16 +27,17 @@
 #include <unistd.h>
 
 struct vbaninfo {
-    uint32_t seq;      // Packet sequence number
-    long protocol;     // VBAN Protocol
-    long samples;      // Total samples in packet
-    long sample_rate;  // Sample rate
-    long sample_size;  // Bytes per sample
-    long channels;     // Channels count
-    long codec;        // Audio codec
-    long datatype;     // Sample format
-    char *format;      // Sample format name
-    char name[20];     // Stream name
+    uint32_t seq;         /* Packet sequence number */
+    long protocol;        /* VBAN Protocol */
+    long frames;          /* Total frames in packet */
+    long frame_size;      /* Frame size */
+    long sample_rate;     /* Sample rate */
+    long sample_size;     /* Bytes per sample */
+    long channels;        /* Channels count */
+    long codec;           /* Audio codec */
+    long format;          /* Sample format */
+    char *format_name;    /* Sample format name */
+    char stream_name[20]; /* Stream name */
 };
 
 /*
@@ -56,10 +57,6 @@ struct vbaninfo {
 #define VBAN_PROTOCOL_UNDEFINED_3 0xC0
 #define VBAN_PROTOCOL_USER        0xE0
 
-/* VBAN sample rate */
-#define VBAN_SR_MAXNUMBER         21
-extern long vban_srlist[VBAN_SR_MAXNUMBER];
-
 /* VBAN datatype (sample format) */
 #define VBAN_DATATYPE_BYTE8       0x00
 #define VBAN_DATATYPE_INT16       0x01
@@ -69,16 +66,11 @@ extern long vban_srlist[VBAN_SR_MAXNUMBER];
 #define VBAN_DATATYPE_FLOAT64     0x05
 #define VBAN_DATATYPE_12BITS      0x06
 #define VBAN_DATATYPE_10BITS      0x07
-struct vban_datatype {
-    char *name;                   /* format name */
-    long bps;                     /* bytes per sample */
-};
-extern struct vban_datatype vban_dtlist[8];
 
 /* VBAN codecs */
 #define VBAN_CODEC_PCM            0x00
-#define VBAN_CODEC_VBCA           0x10 //VB-AUDIO AOIP CODEC
-#define VBAN_CODEC_VBCV           0x20 //VB-AUDIO VOIP CODEC
+#define VBAN_CODEC_VBCA           0x10  /* VB-AUDIO AOIP CODEC */
+#define VBAN_CODEC_VBCV           0x20  /* VB-AUDIO VOIP CODEC */
 #define VBAN_CODEC_UNDEFINED_1    0x30
 #define VBAN_CODEC_UNDEFINED_2    0x40
 #define VBAN_CODEC_UNDEFINED_3    0x50

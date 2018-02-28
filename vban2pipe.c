@@ -87,12 +87,12 @@ static void runhook(char *prog)
 static int syncstreams(struct stream *stream1, struct stream *stream2, int64_t *offset)
 {
     int i, w, matches;
-    long size = stream2->datasize;
+    long size = stream2->pktsize;
     char *data1, data2[size * 2];
 
     // compare streams
-    if (stream1->samples != stream2->samples ||
-        stream1->datatype != stream2->datatype ||
+    if (stream1->frames != stream2->frames ||
+        stream1->format != stream2->format ||
         stream1->channels != stream2->channels ||
         stream1->sample_rate != stream2->sample_rate)
         return -1;
@@ -115,7 +115,7 @@ static int syncstreams(struct stream *stream1, struct stream *stream2, int64_t *
             if (matches == 0) {
                 *offset = (int64_t) stream2->expected - 1;
                 *offset -= (int64_t) stream1->expected;
-                *offset *= stream1->samples;
+                *offset *= stream1->frames;
                 *offset += i / w;
             }
             matches++;
@@ -223,33 +223,33 @@ static void run(int sock)
             if (matches == 1) {
                 if (stream->insync++ && stream->offset != offset) {
                     // offset mismatch, pause (~100ms) and try to sync again
-                    stream->insync = -(long) (stream->sample_rate / stream->samples / 10);
+                    stream->insync = -(long) (stream->sample_rate / stream->frames / 10);
                     continue;
                 }
 
                 if (stream->insync == 3)
-                    logger(LOG_INF, "[%s@%s] stream online, offset %lld samples",
+                    logger(LOG_INF, "[%s@%s] stream online, offset %lld frames",
                            stream->name, stream->ifname, (long long) offset);
 
                 stream->offset = offset;
             } else {
                 if (stream->insync == 0)
                     // still cant sync, pause (~100ms) stream for a while
-                    stream->insync = -(long) (stream->sample_rate / stream->samples / 10);
+                    stream->insync = -(long) (stream->sample_rate / stream->frames / 10);
             }
 
             continue;
         }
 
         if (stream->prev.data && !stream->prev.sent) {
-            output_play(stream->samples * (stream->expected - 1) - stream->offset,
-                        stream->samples, stream->prev.data, stream->datasize);
+            output_play(stream->frames * (stream->expected - 1) - stream->offset,
+                        stream->prev.data, stream->frames, stream->frame_size);
             stream->prev.sent++;
         }
 
         if (!stream->curr.sent) {
-            output_play(stream->samples * stream->expected - stream->offset,
-                        stream->samples, stream->curr.data, stream->datasize);
+            output_play(stream->frames * stream->expected - stream->offset,
+                        stream->curr.data, stream->frames, stream->frame_size);
             stream->curr.sent++;
         }
     }

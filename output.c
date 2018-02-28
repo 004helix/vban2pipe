@@ -42,7 +42,7 @@ static int64_t outpos;
 static char *presence = NULL;
 static char *buffer = NULL;
 static long lost_total = 0;
-static long cache; // samples
+static long cache; // frames
 static int fd;
 
 
@@ -51,9 +51,9 @@ static void report_lost(long lost)
     lost_total += lost;
 
     if (lost == 1)
-        logger(LOG_INF, "<out> lost 1 sample");
+        logger(LOG_INF, "<out> lost 1 frame");
     else
-        logger(LOG_INF, "<out> lost %ld samples", lost);
+        logger(LOG_INF, "<out> lost %ld frames", lost);
 }
 
 
@@ -73,7 +73,7 @@ int output_init(char *pipename, struct stream *stream)
                         *(d++) = *s;
                         break;
                     case 'f':
-                        d += snprintf(d, l, "%s", stream->format);
+                        d += snprintf(d, l, "%s", stream->format_name);
                         break;
                     case 'r':
                         d += snprintf(d, l, "%ld", stream->sample_rate);
@@ -96,7 +96,7 @@ int output_init(char *pipename, struct stream *stream)
     if ((fd = open(filename, O_WRONLY | O_NONBLOCK | O_CLOEXEC)) < 0)
         return -1;
 
-    cache = stream->samples * BUFFER_OUT_PACKETS;
+    cache = stream->frames * BUFFER_OUT_PACKETS;
 
     return 0;
 }
@@ -121,15 +121,16 @@ int output_done(void)
 }
 
 
-void output_play(int64_t ts, long samples, const char *data, long size)
+void output_play(int64_t ts, const char *data, long frames, long frame_size)
 {
-    long ss = size / samples;
-    long lost, off, len, i;
+    long size, lost, off, len, i;
 
-    assert(samples <= cache);
+    size = frames * frame_size;
+
+    assert(frames <= cache);
 
     if (!buffer) {
-        buffer = malloc(cache * ss);
+        buffer = malloc(cache * frame_size);
         if (!buffer)
             return;
     }
@@ -140,49 +141,49 @@ void output_play(int64_t ts, long samples, const char *data, long size)
             return;
 
         memcpy(buffer, data, size);
-        memset(presence, 1, samples);
-        if (samples < cache)
-            bzero(presence + samples, cache - samples);
+        memset(presence, 1, frames);
+        if (frames < cache)
+            bzero(presence + frames, cache - frames);
         outpos = ts;
     }
 
     if (ts <= outpos) {
-        if (ts + samples <= outpos)
+        if (ts + frames <= outpos)
             // nothing to play in this packet
             return;
 
         off = (long) (outpos - ts);
-        len = samples - off;
+        len = frames - off;
 
-        memcpy(buffer, data + off * ss, len * ss);
+        memcpy(buffer, data + off * frame_size, len * frame_size);
         memset(presence, 1, len);
 
         return;
     }
 
-    if (ts + samples <= outpos + cache) {
+    if (ts + frames <= outpos + cache) {
         off = (long) (ts - outpos);
 
-        memcpy(buffer + off * ss, data, size);
-        memset(presence + off, 1, samples);
+        memcpy(buffer + off * frame_size, data, size);
+        memset(presence + off, 1, frames);
 
         return;
     }
 
-    len = (long) ((ts - outpos) + (int64_t) (samples - cache));
+    len = (long) ((ts - outpos) + (int64_t) (frames - cache));
     outpos += len;
 
-    // play samples from the start of buffer
+    // play frames from the start of buffer
     lost = 0;
     while (len) {
         if (*presence) {
             // calc length of block to play
             for (i = 1; i < len && i < cache && presence[i]; i++);
 
-            if (write(fd, buffer, i * ss) < 0) {
+            if (write(fd, buffer, i * frame_size) < 0) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
                     // report overrun can be very noisy if source suspended
-                    logger(LOG_DBG, "output overrun: %ld samples", i);
+                    logger(LOG_DBG, "output overrun: %ld frames", i);
                 } else {
                     logger(LOG_ERR, "write failed: %s", strerror(errno));
                     exit(1);
@@ -190,7 +191,7 @@ void output_play(int64_t ts, long samples, const char *data, long size)
             }
 
             if (i < cache) {
-                memmove(buffer, buffer + i * ss, (cache - i) * ss);
+                memmove(buffer, buffer + i * frame_size, (cache - i) * frame_size);
                 memmove(presence, presence + i, cache - i);
                 bzero(presence + cache - i, i);
             } else {
@@ -202,7 +203,7 @@ void output_play(int64_t ts, long samples, const char *data, long size)
             for (i = 1; i < len && i < cache && !presence[i]; i++);
 
             if (i < cache) {
-                memmove(buffer, buffer + i * ss, (cache - i) * ss);
+                memmove(buffer, buffer + i * frame_size, (cache - i) * frame_size);
                 memmove(presence, presence + i, cache - i);
                 bzero(presence + cache - i, i);
                 report_lost(i);
@@ -219,8 +220,8 @@ void output_play(int64_t ts, long samples, const char *data, long size)
         report_lost(lost);
 
     off = (long) (ts - outpos);
-    memcpy(buffer + off * ss, data, size);
-    memset(presence + off, 1, samples);
+    memcpy(buffer + off * frame_size, data, size);
+    memset(presence + off, 1, frames);
 }
 
 

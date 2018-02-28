@@ -31,7 +31,7 @@
 int output_init(char *pipename, struct stream *stream);
 int output_done(void);
 
-void output_play(int64_t ts, long samples, const char *data, long size);
+void output_play(int64_t ts, const char *data, long frames, long frame_size);
 void output_move(int64_t offset);
 
 long output_lost();

@@ -49,14 +49,15 @@ struct stream {
     // stream name
     char name[20];
 
-    // data format
-    long samples;              // samples per packet
-    long sample_size;          // sample size in bytes
-    long sample_rate;          // sample rate
-    long channels;             // channels
-    long datasize;             // total bytes in one packet
-    long datatype;             // stream format (VBAN)
-    char *format;              // sample format name
+    // audio data
+    long frames;               /* frames per packet */
+    long frame_size;           /* frame size in bytes (i.e. one set of samples, one for each channel). */
+    long sample_size;          /* sample size in bytes */
+    long sample_rate;          /* sample rate */
+    long channels;             /* channels */
+    long pktsize;              /* total bytes in one packet (i.e. frames * frame_size) */
+    long format;               /* sample format */
+    char *format_name;         /* sample format name */
 
     // stream counters
     long lost;                 // total lost packets counter

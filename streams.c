@@ -143,7 +143,7 @@ struct stream *getstream(struct vbaninfo *info, struct sockaddr *addr, unsigned 
         }
 
         // check stream name
-        if (strcmp(info->name, stream->name))
+        if (strcmp(info->stream_name, stream->name))
             continue;
 
         // stream found
@@ -246,12 +246,12 @@ struct stream *recvvban(int sock)
         }
 
         if (info.protocol != VBAN_PROTOCOL_AUDIO) {
-            logger(LOG_VRB, "[%s] unsupporded protocol", info.name);
+            logger(LOG_VRB, "[%s] unsupporded protocol", info.stream_name);
             continue;
         }
 
         if (info.codec != VBAN_CODEC_PCM) {
-            logger(LOG_VRB, "[%s] unsupported audio codec", info.name);
+            logger(LOG_VRB, "[%s] unsupported audio codec", info.stream_name);
             continue;
         }
 
@@ -262,20 +262,20 @@ struct stream *recvvban(int sock)
             double dt, dv;
 
             // check packet size
-            if (size < stream->datasize) {
+            if (size < stream->pktsize) {
                 logger(LOG_VRB, "[%s@%s] too short packet received",
                        stream->name, stream->ifname);
                 continue;
             } else
-            if (size > stream->datasize) {
+            if (size > stream->pktsize) {
                 logger(LOG_VRB, "[%s@%s] too long packet received",
                        stream->name, stream->ifname);
                 continue;
             }
 
             // check packet type
-            if (stream->samples != info.samples ||
-                stream->datatype != info.datatype ||
+            if (stream->frames != info.frames ||
+                stream->format != info.format ||
                 stream->channels != info.channels ||
                 stream->sample_rate != info.sample_rate) {
                 logger(LOG_VRB, "[%s@%s] bad packet received",
@@ -318,14 +318,14 @@ struct stream *recvvban(int sock)
                 };
 #endif
                 default:
-                    logger(LOG_ERR, "[%s] unsupported address family", info.name);
+                    logger(LOG_ERR, "[%s] unsupported address family", info.stream_name);
                     continue;
             }
 
             // create new stream entry
             stream = malloc(sizeof(struct stream));
             if (!stream) {
-                logger(LOG_ERR, "[%s] cannot allocate memory", info.name);
+                logger(LOG_ERR, "[%s] cannot allocate memory", info.stream_name);
                 free(buffer);
                 return NULL;
             }
@@ -335,15 +335,16 @@ struct stream *recvvban(int sock)
             if_indextoname(ifindex, stream->ifname);
 
             memcpy(&stream->peer, &addr, sizeof(struct sockaddr_storage));
-            strcpy(stream->name, info.name);
+            strcpy(stream->name, info.stream_name);
 
-            stream->samples = info.samples;
+            stream->frames = info.frames;
+            stream->frame_size = info.frame_size;
             stream->sample_size = info.sample_size;
             stream->sample_rate = info.sample_rate;
             stream->channels = info.channels;
-            stream->datasize = size;
-            stream->datatype = info.datatype;
+            stream->pktsize = size;
             stream->format = info.format;
+            stream->format_name = info.format_name;
 
             stream->lost = 0;
             stream->expected = info.seq;
@@ -359,14 +360,14 @@ struct stream *recvvban(int sock)
             stream->next = NULL;
 
             // stats
-            pps = (double) stream->sample_rate / (double) stream->samples;
+            pps = (double) stream->sample_rate / (double) stream->frames;
             stream->ewma_a1 = 2.0 / (1.0 + 30.0 * pps);
             stream->ewma_a2 = 1.0 - stream->ewma_a1;
             stream->dt_average = 1000000000.0 / pps;
             stream->dt_variance = 0;
 
             logger(LOG_INF, "[%s@%s] stream connected from %s, %s, %ld Hz, %ld channel(s)",
-                   stream->name, stream->ifname, peer, stream->format,
+                   stream->name, stream->ifname, peer, stream->format_name,
                    stream->sample_rate, stream->channels);
 
             if (streams) {

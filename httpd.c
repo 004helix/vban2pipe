@@ -170,7 +170,7 @@ static char *json_dump(void)
         len += sprintf(buffer + len, ", \"role\":\"%s\"", i ? "backup" : "primary");
         len += sprintf(buffer + len, ", \"ifname\":\"%s\"", json_escape(ss->ifname));
         len += sprintf(buffer + len, ", \"peer\":\"%s\"", json_escape(peer));
-        len += sprintf(buffer + len, ", \"format\":\"%s\"", json_escape(ss->format));
+        len += sprintf(buffer + len, ", \"format\":\"%s\"", json_escape(ss->format_name));
         len += sprintf(buffer + len, ", \"rate\":%ld", ss->sample_rate);
         len += sprintf(buffer + len, ", \"channels\":%ld", ss->channels);
         len += sprintf(buffer + len, ", \"expected\":%lu", (long unsigned)ss->expected);
@@ -348,7 +348,7 @@ void httpd_update(struct stream *streams)
         cell->ss = ss;
     }
 
-    // save lost samples
+    // save lost frames
     cell->lost = output_lost();
 
     // save streams stat
@@ -357,7 +357,7 @@ void httpd_update(struct stream *streams)
         strcpy(cell->ss[i].name, stream->name);
 
         cell->ss[i].peer        = stream->peer;
-        cell->ss[i].format      = stream->format;
+        cell->ss[i].format_name = stream->format_name;
         cell->ss[i].sample_rate = stream->sample_rate;
         cell->ss[i].channels    = stream->channels;
         cell->ss[i].lost        = stream->lost;
