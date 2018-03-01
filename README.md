@@ -39,9 +39,9 @@ $ vban2pipe 6980 /tmp/vban.input
 [Stream1] stream connected from 172.16.0.2:56503, s16le, 48000 Hz, 2 channel(s)
 [Stream1] stream online, primary
 [Stream2] stream connected from 172.16.0.2:56504, s16le, 48000 Hz, 2 channel(s)
-[Stream2] stream online, offset -180480 samples
+[Stream2] stream online, offset -180480 frames
 [Stream3] stream connected from 172.16.0.2:56505, s16le, 48000 Hz, 2 channel(s)
-[Stream3] stream online, offset -435456 samples
+[Stream3] stream online, offset -435456 frames
 ...
 ```
 
@@ -52,7 +52,7 @@ $ vban2pipe 6980 /tmp/vban.input
 ...
 [Stream2] expected 3490818, got 3490821: lost 3 packets
 [Stream3] expected 3490818, got 3490821: lost 3 packets
-<out> lost 256 samples
+<out> lost 256 frames
 [Stream2] expected 3490843, got 3490845: lost 2 packets
 [Stream3] expected 3490843, got 3490845: lost 2 packets
 ...
@@ -61,7 +61,7 @@ $ vban2pipe 6980 /tmp/vban.input
 
 Output latency is only 2 packets in stream.
 
-The pipe name parsed each time the first stream is connected.
+The pipe name parsed each time the primary stream is connected.
 The following placeholders in pipe name can be used:
 
 | Character | Replacement                                |
