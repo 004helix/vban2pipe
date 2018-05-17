@@ -20,7 +20,7 @@
  *  USA.
  */
 
-#define _BSD_SOURCE
+#define _DEFAULT_SOURCE
 #include <endian.h>
 #include <stdint.h>
 #include <string.h>
